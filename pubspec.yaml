@@ -27,22 +27,9 @@ dev_dependencies:
 
 topics:
   - fkernal
-  - flutter
-  - dio
-  - build_runner
-  - json_annotation
-  - http
-  - http_parser
-  - hive
-  - provider
   - state-management
   - storage
-  - flutter_secure_storage
-  - connectivity
-  - path_provider
-  - configuration
   - error-handling
   - theming
-  - mime
 
 license: MIT
