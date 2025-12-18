@@ -8,6 +8,7 @@ import '../networking/api_client.dart';
 import '../networking/endpoint_registry.dart';
 import '../state/state_manager.dart';
 import '../storage/storage_manager.dart';
+import '../state/local_slice.dart';
 import '../theme/theme_manager.dart';
 
 /// Extension methods on BuildContext for accessing FKernal services.
@@ -79,5 +80,17 @@ extension FKernalContextExtensions on BuildContext {
       params: params,
       pathParams: pathParams,
     );
+  }
+
+  /// Gets the value of a local state slice.
+  T localState<T>(String id) => fkernal.getLocalSlice<LocalSlice<T>>(id).state;
+
+  /// Gets a local state slice object.
+  LocalSlice<T> localSlice<T>(String id) =>
+      fkernal.getLocalSlice<LocalSlice<T>>(id);
+
+  /// Updates a local state slice.
+  void updateLocal<T>(String id, T Function(T current) updater) {
+    fkernal.getLocalSlice<LocalSlice<T>>(id).update(updater);
   }
 }

@@ -2,43 +2,51 @@
 
 **The Configuration-Driven Flutter Kernal**
 
-FKernal is a powerful, opinionated framework built on top of Flutter that allows developers to focus **exclusively on building UI**. It eliminates boilerplate by automatically orchestrating networking, state management, local storage, error handling, and theming based on simple configuration constants.
+FKernal is a high-level, opinionated framework designed to accelerate Flutter development by shifting the focus from imperative boilerplate to declarative configuration. It provides a unified orchestration layer for **Networking, State Management, Local Storage, Error Handling, and Theming**.
 
 ---
 
-## 🌟 Key Features
-
-### ⚡️ Zero-Boilerplate State Management
-Forget manual `ChangeNotifier`, `Bloc`, or `Riverpod` setups. FKernal automatically generates specialized `ResourceState` (Loading, Data, Error) for every API endpoint you define.
-
-### 📡 Declarative Networking
-Define your API structure once. FKernal handles:
-- **Dio Integration**: Fully configured HTTP client.
-- **Auto-Parsing**: Type-safe response parsing via custom parsers.
-- **Interceptors**: Global and per-request interceptors for auth, logging, and more.
-
-### 💾 Smart Caching & Offline Support
-Performant local storage powered by **Hive**:
-- **TTL Caching**: Define cache durations (Short, Medium, Long, Persistent).
-- **Auto-Invalidation**: Mutations can automatically trigger re-fetches of related data.
-- **Offline Resilience**: Serve cached data when the network is unavailable.
-
-### 🎨 Design System & Theming
-A centralized `ThemeConfig` that generates consistent Light and Dark Material 3 themes:
-- Unified typography and color tokens.
-- Custom border radius and elevation systems.
-- Automatic theme switching based on system settings.
-
-### 🧩 Local State Slices
-Optimized widgets for managing non-API state (counters, toggles, form inputs):
-- **Specialized Slices**: `ValueSlice`, `ListSlice`, `MapSlice`, `ToggleSlice`, `CounterSlice`.
-- **History & Undo**: Built-in support for state history and undo/redo operations.
+## 📖 Table of Contents
+- [Architecture Overview](#-architecture-overview)
+- [Installation](#-installation)
+- [Core Configuration](#-core-configuration)
+  - [FKernalConfig](#fkernalconfig)
+  - [Environment Management](#environment-management)
+  - [Feature Flags](#feature-flags)
+- [Declarative Networking](#-declarative-networking)
+  - [Endpoint Definition](#endpoint-definition)
+  - [Path & Query Parameters](#path--query-parameters)
+  - [Interceptors & Headers](#interceptors--headers)
+- [State Management Deep Dive](#-state-management-deep-dive)
+  - [Resource States (API)](#resource-states-api)
+  - [Local State Slices (UI)](#local-state-slices-ui)
+- [Theming System](#-theming-system)
+- [Persistence & Caching](#-persistence--caching)
+- [Error Handling & Resilience](#-error-handling--resilience)
+- [Widget Reference](#-widget-reference)
+- [Extension Library](#-extension-library)
 
 ---
 
-## 🚀 Quick Start
+## 🏗 Architecture Overview
 
-### 1. Add Dependency
+FKernal follows a **Configuration-First** philosophy. You define the "What" (API structure, branding tokens), and the framework handles the "How" (State transitions, caching logic, error recovery).
+
+```mermaid
+graph TD
+    App[main.dart] --> Init[FKernal.init]
+    Init --> Registry[Endpoint Registry]
+    Init --> Client[ApiClient / Dio]
+    Init --> Cache[Storage Manager / Hive]
+    Registry --> Managers[State & Theme Managers]
+    Managers --> UI[FKernalApp / Provider]
+    UI --> Widgets[FKernalBuilder / ActionBuilder]
+```
+
+---
+
+## 🚀 Installation
+
 Add FKernal to your `pubspec.yaml`:
 
 ```yaml
@@ -46,131 +54,153 @@ dependencies:
   fkernal: ^1.0.0
 ```
 
-### 2. Configure Your App
-Define your endpoints and theme in a central configuration.
+---
+
+## ⚙️ Core Configuration
+
+### FKernalConfig
+The central nerve center of your application.
 
 ```dart
-// lib/config.dart
-final appConfig = FKernalConfig(
+const config = FKernalConfig(
   baseUrl: 'https://api.myapp.com',
-  environment: Environment.development,
+  environment: Environment.production,
+  connectTimeout: 15000,
+  features: FeatureFlags(
+    enableCache: true,
+    enableAutoRetry: true,
+  ),
   theme: ThemeConfig(
-    primaryColor: Color(0xFF6366F1),
-    borderRadius: 16.0,
+    primaryColor: Colors.deepPurple,
+    useMaterial3: true,
   ),
 );
+```
 
-final myEndpoints = [
+### Environment Management
+FKernal uses the `Environment` enum to control internal behavior:
+- `development`: Verbose logging, detailed error messages.
+- `staging`: Controlled logging, sanitized errors.
+- `production`: Logging disabled, user-friendly error masks.
+
+---
+
+## 📡 Declarative Networking
+
+### Endpoint Definition
+Endpoints are defined as immutable `Endpoint` objects. This allows the framework to pre-register routes and optimize state generation.
+
+```dart
+final endpoints = [
   Endpoint(
-    id: 'getUsers',
-    path: '/users',
+    id: 'getProfile',
+    path: '/me',
     method: HttpMethod.get,
-    cacheConfig: CacheConfig.medium,
+    cacheConfig: CacheConfig.long, // Cache for 1 hour
   ),
   Endpoint(
-    id: 'createUser',
-    path: '/users',
+    id: 'updateAvatar',
+    path: '/me/avatar',
     method: HttpMethod.post,
-    invalidates: ['getUsers'], // Refreshes the user list automatically!
+    invalidates: ['getProfile'], // Clear profile cache on success
   ),
 ];
 ```
 
-### 3. Initialize FKernal
-Wrap your application entry point:
+### Path & Query Parameters
+FKernal automatically parses path variables using the `{paramName}` syntax.
 
 ```dart
-// lib/main.dart
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  await FKernal.init(
-    config: appConfig,
-    endpoints: myEndpoints,
-  );
-  
-  runApp(FKernalApp(child: MyApp()));
-}
-```
+// Definition
+Endpoint(id: 'getPost', path: '/posts/{postId}')
 
-### 4. Build UI Screens
-Consume data directly in your widgets without writing business logic.
-
-```dart
-class UsersScreen extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return FKernalBuilder<List<User>>(
-      resource: 'getUsers',
-      builder: (context, users) => ListView.builder(
-        itemCount: users.length,
-        itemBuilder: (_, i) => UserCard(users[i]),
-      ),
-      // Loading spinner and Error handling are injected automatically!
-    );
-  }
-}
-```
-
----
-
-## 🧠 Core Concepts
-
-### Resource States
-Every API request in FKernal goes through a standardized lifecycle:
-- `ResourceInitial`: The request hasn't started.
-- `ResourceLoading`: Data is being fetched (optionally shows previous data if cached).
-- `ResourceData`: Successfully fetched and parsed data.
-- `ResourceError`: A typed error occurred (Network, Server, Auth, etc.).
-
-### Local State Slices
-Use `FKernalLocalBuilder` for ephemeral UI state. It's faster than `setState` and more organized.
-
-```dart
-FKernalLocalBuilder<int>(
-  slice: 'main_counter',
-  create: () => CounterSlice(initial: 0),
-  builder: (context, count, update) => Column(
-    children: [
-      Text('Count: $count'),
-      ElevatedButton(
-        onPressed: () => context.updateLocal<int>('main_counter', (c) => c + 1),
-        child: Text('Increment'),
-      ),
-    ],
-  ),
+// Usage in UI
+FKernalBuilder(
+  resource: 'getPost',
+  pathParams: {'postId': '42'},
 )
 ```
 
 ---
 
-## 🛠 Advanced Usage
+## 🔄 State Management Deep Dive
 
-### Custom Interceptors
-Add custom logic to every request, such as adding dynamic headers or custom logging.
+### Resource States (API)
+The `ResourceState<T>` sealed class ensures your UI is always in a predictable state.
 
+| State | Purpose | Properties |
+| :--- | :--- | :--- |
+| `ResourceInitial` | Idle state. | - |
+| `ResourceLoading` | Network call active. | `previousData` (for smooth refreshes) |
+| `ResourceData` | Data retrieved. | `data`, `fetchedAt`, `fromCache` |
+| `ResourceError` | Request failed. | `error` (FKernalError), `previousData` |
+
+**Mapping States:**
 ```dart
-appConfig.interceptors.add(
-  InterceptorsWrapper(
-    onRequest: (options, handler) {
-      options.headers['X-Device-ID'] = deviceId;
-      return handler.next(options);
-    },
-  ),
+state.when(
+  loading: () => Spinner(),
+  onData: (data) => ListUI(data),
+  onError: (error) => ErrorUI(error),
 );
 ```
 
-### Type-Safe Action Builders
-Handle mutations (POST, PUT, DELETE) with built-in loading states and snackbars.
+### Local State Slices (UI)
+Manage ephemeral state like form inputs or interactive counters using optimized slices.
+
+- `CounterSlice`: Pre-built methods for `increment()` and `decrement()`.
+- `ToggleSlice`: Lightweight boolean wrapper with `toggle()`.
+- `ListSlice<T>`: Collection manager with built-in history/undo support.
+
+---
+
+## 🎨 Theming System
+Define your design tokens once in `ThemeConfig`. FKernal automatically generates consistent `ThemeData` for both Light and Dark modes, ensuring accessibility and Material 3 compliance.
 
 ```dart
-FKernalActionBuilder<User>(
-  action: 'createUser',
-  onSuccess: (user) => Navigator.pop(context),
+final theme = ThemeConfig(
+  primaryColor: Color(0xFF1E88E5),
+  borderRadius: 12.0,
+  fontFamily: 'Outfit',
+);
+
+// Access in UI
+final primary = context.theme.colorScheme.primary;
+```
+
+---
+
+## 💾 Persistence & Caching
+Powered by **Hive**, FKernal provides a high-performance binary storage engine.
+- **TTL Caching**: Define exact durations for how long data should live.
+- **Stale-While-Revalidate**: Return cached data immediately while fetching fresh data in the background.
+- **Secure Storage**: Integration for sensitive credentials via `flutter_secure_storage`.
+
+---
+
+## 🧱 Widget Reference
+
+### FKernalBuilder
+The reactive bridge between your API and the UI.
+
+```dart
+FKernalBuilder<User>(
+  resource: 'getUser',
+  pathParams: {'id': '1'},
+  autoFetch: true, // Fetch immediately on mount
+  builder: (context, user) => ProfileHeader(user),
+)
+```
+
+### FKernalActionBuilder
+A specialized builder for mutations that provides a `perform` callback.
+
+```dart
+FKernalActionBuilder<void>(
+  action: 'deletePost',
   showSuccessSnackbar: true,
-  builder: (context, perform, state) => ElevatedButton(
-    onPressed: state.isLoading ? null : () => perform(userData),
-    child: state.isLoading ? CircularProgressIndicator() : Text('Save User'),
+  builder: (context, perform, state) => IconButton(
+    onPressed: state.isLoading ? null : () => perform(null),
+    icon: Icon(Icons.delete),
   ),
 )
 ```
@@ -178,26 +208,25 @@ FKernalActionBuilder<User>(
 ---
 
 ## 📊 Extension Library
-Access all FKernal services through the `BuildContext`:
+The framework provides comprehensive `BuildContext` extensions for zero-boilerplate access to services.
 
-| Extension | Service | Usage |
+| Extension | Return Type | Description |
 | :--- | :--- | :--- |
-| `context.stateManager` | Central State | Access any resource state |
-| `context.apiClient` | Networking | Manual API calls |
-| `context.themeManager` | UI | Dynamic theme switching |
-| `context.localState<T>(id)` | Local State | Get ephemeral state values |
-| `context.refreshResource(id)` | Networking | Force re-fetch data |
+| `context.stateManager` | `StateManager` | Global state orchestration. |
+| `context.apiClient` | `ApiClient` | Direct Dio access. |
+| `context.themeManager` | `ThemeManager` | Dynamic theme switching. |
+| `context.localState<T>(id)` | `T` | Current value of a local slice. |
+| `context.updateLocal<T>(id, fn)` | `void` | Update a local state slice. |
+| `context.fetchResource(id)` | `Future<T>` | Imperative API fetch. |
 
 ---
 
-## 📦 Built on Giants
-FKernal orchestrates these world-class packages:
-- **Dio**: The powerful HTTP client for Dart.
-- **Hive**: Lightweight and blazing fast key-value database.
-- **Provider**: Standardized dependency injection.
-- **Connectivity Plus**: Real-time network status monitoring.
+## 🚀 Pro Tips
+- **Pre-loading**: Call `context.fetchResource('id')` during splash screens to warm up the cache.
+- **Selective Invalidation**: Use the `invalidates` list in `Endpoint` config to keep your UI in sync without manual refreshes.
+- **Custom Parsing**: Use the `parser` property in `Endpoint` to convert raw JSON into complex objects using `json_serializable`.
 
 ---
 
 ## 📜 License
-Licensed under the [MIT License](LICENSE).
+FKernal is released under the MIT License. Built with ❤️ for the Flutter community.
