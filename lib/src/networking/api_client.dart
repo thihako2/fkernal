@@ -5,6 +5,7 @@ import '../core/environment.dart';
 import '../core/fkernal_config.dart';
 import '../error/error_handler.dart';
 import '../error/fkernal_error.dart';
+import '../core/models/fkernal_model.dart';
 import '../storage/storage_manager.dart';
 import 'endpoint.dart';
 import 'http_method.dart';
@@ -183,6 +184,13 @@ class ApiClient {
     Map<String, String>? pathParams,
     dynamic body,
   }) async {
+    dynamic requestBody = body;
+
+    if (body is FKernalModel) {
+      body.validate();
+      requestBody = body.toJson();
+    }
+
     final path = endpoint.buildPath(pathParams);
     final options = Options(
       method: endpoint.method.value,
@@ -198,7 +206,7 @@ class ApiClient {
     try {
       final response = await _dio.request<dynamic>(
         path,
-        data: body,
+        data: requestBody,
         queryParameters:
             mergedQueryParams.isNotEmpty ? mergedQueryParams : null,
         options: options,

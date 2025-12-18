@@ -31,6 +31,7 @@ library fkernal;
 export 'src/core/fkernal_app.dart';
 export 'src/core/fkernal_config.dart';
 export 'src/core/environment.dart';
+export 'src/core/models/fkernal_model.dart';
 
 // Networking
 export 'src/networking/endpoint.dart';
