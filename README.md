@@ -38,12 +38,12 @@ FKernal eliminates boilerplate by providing a centralized orchestration layer fo
 
 Deep dive into specific topics:
 
-- 🏛️ **[Architecture & Configuration](docs/architecture.md)**
-- 🌐 **[Networking](docs/networking.md)**
-- 🔄 **[State Management](docs/state_management.md)**
-- 💾 **[Caching Strategy](docs/caching.md)**
-- 🎨 **[Theming](docs/theming.md)**
-- 🔄 **[Migration Guide](docs/migration.md)**
+- 🏛️ **[Architecture & Configuration](doc/architecture.md)**
+- 🌐 **[Networking](doc/networking.md)**
+- 🔄 **[State Management](doc/state_management.md)**
+- 💾 **[Caching Strategy](doc/caching.md)**
+- 🎨 **[Theming](doc/theming.md)**
+- 🔄 **[Migration Guide](doc/migration.md)**
 
 ---
 
@@ -213,7 +213,7 @@ That's it! No BLoCs, no repositories, no API client setup.
 
 ## 📖 Core Concepts
 
-> 📘 See [Architecture Deep Dive](docs/architecture.md) for full details.
+> 📘 See [Architecture Deep Dive](doc/architecture.md) for full details.
 
 ### Configuration
 
@@ -242,7 +242,7 @@ const config = FKernalConfig(
 
 ### Endpoints
 
-> 📘 See [Networking Deep Dive](docs/networking.md) for full details.
+> 📘 See [Networking Deep Dive](doc/networking.md) for full details.
 
 Endpoints are immutable blueprints for your API layer:
 
@@ -268,7 +268,7 @@ Endpoint(
 
 ### State Management
 
-> 📘 See [State Management Deep Dive](docs/state_management.md) for full details on adapters and local state.
+> 📘 See [State Management Deep Dive](doc/state_management.md) for full details on adapters and local state.
 
 Every request is tracked as a `ResourceState<T>`:
 
@@ -431,7 +431,7 @@ context.updateLocal<int>('counter', (v) => v + 1);
 
 ## 🎨 Theming
 
-> 📘 See [Theming Deep Dive](docs/theming.md) for full details.
+> 📘 See [Theming Deep Dive](doc/theming.md) for full details.
 
 Define your design system tokens:
 
@@ -604,7 +604,7 @@ parser: (json) => (json as List)
 
 ### 3. Leverage Cache Invalidation
 
-> See [Caching Deep Dive](docs/caching.md) for strategy details.
+> See [Caching Deep Dive](doc/caching.md) for strategy details.
 Use `invalidates` to keep UI consistent without manual refreshes:
 ```dart
 Endpoint(

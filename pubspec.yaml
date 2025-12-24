@@ -22,6 +22,11 @@ dependencies:
   cloud_firestore: ^5.0.1
   firebase_auth: ^5.1.0
   firebase_storage: ^12.0.1
+  # Optional state management bridges - users must add these to their own projects
+  flutter_bloc: ^8.1.3
+  signals_flutter: ^5.2.2
+  get: ^4.6.6
+  mobx: ^2.3.3+2
 
 dev_dependencies:
   flutter_test:
@@ -29,11 +34,6 @@ dev_dependencies:
   flutter_lints: ^3.0.1
   build_runner: ^2.4.8
   json_serializable: ^6.7.1
-  # Optional state management bridges - users must add these to their own projects
-  flutter_bloc: ^8.1.3
-  signals_flutter: ^5.2.2
-  get: ^4.6.6
-  mobx: ^2.3.3+2
 
 topics:
   - fkernal
