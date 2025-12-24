@@ -39,7 +39,12 @@ abstract class KernelObserver {
 class LoggingKernelObserver extends KernelObserver {
   @override
   void onEvent(KernelEvent event) {
-    // Only log in debug or if specifically enabled
-    print(event.toString());
+    // ignore: avoid_print - This is intentional for logging/debugging
+    // Production apps should use a custom observer
+    assert(() {
+      // ignore: avoid_print
+      print(event.toString());
+      return true;
+    }());
   }
 }

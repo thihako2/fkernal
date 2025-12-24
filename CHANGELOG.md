@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0] - 2025-12-24
+
+### 🚀 Major Migration: Riverpod
+
+This release replaces the internal `provider` + `ValueNotifier` engine with **Riverpod** for robust state management.
+
+### BREAKING CHANGES
+- **Removed `provider` dependency**: All `context.read` / `context.watch` calls depending on `package:provider` will fail.
+- **Context Extensions**: `context.useResource` is **NO LONGER REACTIVE**. It returns a snapshot.
+  - **Migration**: Use `FKernalBuilder` or convert your widget to `ConsumerWidget` and use `ref.watch`.
+- **`watchThemeManager` removed**: Use `context.themeManager` inside a `ListenableBuilder`.
+
+### Added
+- **Universal State Management**:
+  - **Architecture**: Pluggable state engine supporting Riverpod (default), BLoC, GetX, MobX, Signals, and Provider.
+  - **Adapters**: New `StateAdapter` and `ResourceStateAdapter` interfaces for custom implementations.
+  - **Configuration**: New `stateManagement`, `stateAdapter`, and `localStateFactory` options in `FKernalConfig`.
+- **Riverpod Default**: Optimized internal engine using `UncontrolledProviderScope` and `ProviderContainer`.
+- **Multi-State Bridges**: Drop-in bridges (`ResourceCubit`, `ResourceSignal`, etc.) for hybrid architectures.
+- **StateManager**: Added `stream()` method for easy integration with external reactive libraries.
+- **Improved Type Safety**: Enhanced generic type stability during `ResourceState` transitions (Loading/Error) to prevent casting issues in builders.
+- **Global Customizability**: Added `GlobalUIConfig` for default builders, custom network `interceptors` support, and `ProviderContainer` overrides.
+- **`FKernalBuilder`**: Updated to be a `ConsumerStatefulWidget` with robust type-safe state observation.
+
+---
+
 ## [1.2.0] - 2025-12-24
 
 ### 🎉 Highlights

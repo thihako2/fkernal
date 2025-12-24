@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
+import '../core/fkernal_app.dart';
 import '../error/fkernal_error.dart';
 import '../state/resource_state.dart';
-import '../state/state_manager.dart';
 
 /// Builder widget for performing actions (mutations) on endpoints.
 ///
@@ -65,10 +64,10 @@ class FKernalActionBuilder<T> extends StatefulWidget {
 }
 
 class _FKernalActionBuilderState<T> extends State<FKernalActionBuilder<T>> {
-  ResourceState<T> _state = const ResourceInitial();
+  ResourceState<T> _state = ResourceInitial<T>();
 
   Future<T> _perform(dynamic payload) async {
-    final stateManager = context.read<StateManager>();
+    final stateManager = FKernal.instance.stateManager;
 
     setState(() {
       _state = ResourceLoading<T>(previousData: _state.dataOrNull);

@@ -25,9 +25,33 @@
 ///   runApp(FKernalApp(child: MyApp()));
 /// }
 /// ```
+///
+/// ## Clean Architecture
+///
+/// FKernal follows Clean Architecture principles with three layers:
+/// - **Domain**: Core business logic (entities, repositories, use cases)
+/// - **Data**: External implementations (data sources, repository implementations)
+/// - **Presentation**: UI components (widgets, providers, extensions)
 library fkernal;
 
-// Core
+// =============================================================================
+// CLEAN ARCHITECTURE LAYERS
+// =============================================================================
+
+// Domain Layer - Business logic (entities, repositories, use cases)
+export 'src/domain/domain.dart';
+
+// Data Layer - External implementations (data sources, repository implementations)
+export 'src/data/data.dart';
+
+// Presentation Layer - UI components (widgets, providers, extensions)
+export 'src/presentation/presentation.dart';
+
+// =============================================================================
+// CORE - Framework essentials not covered by Clean Architecture layers
+// =============================================================================
+
+// App initialization
 export 'src/core/fkernal_app.dart';
 export 'src/core/fkernal_config.dart';
 export 'src/core/environment.dart';
@@ -35,26 +59,18 @@ export 'src/core/models/fkernal_model.dart';
 export 'src/core/interfaces.dart';
 export 'src/core/observability.dart';
 
-// Networking
+// Networking (not moved to data layer - these are framework core)
 export 'src/networking/endpoint.dart';
 export 'src/networking/http_method.dart';
 export 'src/networking/api_client.dart';
 export 'src/networking/endpoint_registry.dart';
-// Firebase is optional - import 'package:fkernal/fkernal_firebase.dart' if needed
 
-// State
-export 'src/state/resource_state.dart';
-export 'src/state/state_manager.dart';
-export 'src/state/fkernal_provider.dart';
-export 'src/state/local_slice.dart';
-export 'src/state/resource_key.dart';
-
-// Storage
+// Storage (not moved - these are framework core)
 export 'src/storage/cache_config.dart';
 export 'src/storage/storage_manager.dart';
 export 'src/storage/default_storage_providers.dart';
 
-// Error
+// Error handling
 export 'src/error/fkernal_error.dart';
 export 'src/error/error_handler.dart';
 
@@ -62,13 +78,6 @@ export 'src/error/error_handler.dart';
 export 'src/theme/theme_config.dart';
 export 'src/theme/theme_manager.dart';
 
-// Widgets
-export 'src/widgets/fkernal_builder.dart';
-export 'src/widgets/fkernal_action_builder.dart';
-export 'src/widgets/fkernal_local_builder.dart';
-export 'src/widgets/auto_error_widget.dart';
-export 'src/widgets/auto_loading_widget.dart';
-export 'src/widgets/fkernal_paginated_builder.dart';
-
-// Extensions
-export 'src/extensions/context_extensions.dart';
+// State Management
+export 'src/state/adapters/state_adapter.dart';
+export 'src/state/adapters/local_state_adapter.dart';

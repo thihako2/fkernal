@@ -41,9 +41,9 @@ This document provides comprehensive technical specifications, architecture deta
 │                              KERNEL LAYER                                    │
 │                                                                              │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                        StateManager (Reactive Core)                  │   │
+│  │                        StateManager (Riverpod Container)            │   │
 │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐│   │
-│  │  │ValueNotifier│  │ValueNotifier│  │ValueNotifier│  │ValueNotifier││   │
+│  │  │   Provider  │  │   Provider  │  │   Provider  │  │   Provider  ││   │
 │  │  │  getUsers   │  │   getUser   │  │  getPosts   │  │ LocalSlices ││   │
 │  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘│   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
@@ -73,19 +73,19 @@ This document provides comprehensive technical specifications, architecture deta
 ### Data Flow
 
 ```text
-User Action → Widget → Context Extension → StateManager → ApiClient → Server
+User Action → Widget → Ref/Context → StateManager → ApiClient → Server
                                               ↓
                                          StorageManager (Cache)
                                               ↓
-User ← Widget ← ValueNotifier ← StateManager ← ResourceState<T>
+User ← Widget ← Consumer(Ref) ← StateManager ← ResourceState<T>
 ```
 
 ### Component Responsibilities
 
 | Component | Responsibility |
 |-----------|----------------|
-| **FKernalApp** | Provides kernel context to widget tree via InheritedWidget |
-| **StateManager** | Orchestrates resource states, manages ValueNotifiers per resource |
+| **FKernalApp** | Provides kernel context to widget tree via UncontrolledProviderScope |
+| **StateManager** | Orchestrates resource states, manages Riverpod providers per resource |
 | **ApiClient** | Handles HTTP requests via Dio, applies interceptors, normalizes responses |
 | **StorageManager** | Manages cache reads/writes with TTL, handles persistence |
 | **ThemeManager** | Generates and switches Material themes based on configuration |
@@ -234,7 +234,7 @@ main()
   │       │       └──▶ Register all endpoints by ID
   │       │
   │       ├──▶ Create StateManager
-  │       │       └──▶ Initialize ValueNotifier per resource
+  │       │       └──▶ Initialize ProviderContainer with overrides
   │       │
   │       ├──▶ Create ThemeManager
   │       │       └──▶ Generate light/dark themes
@@ -245,7 +245,7 @@ main()
   │
   └──▶ runApp(FKernalApp(child: MyApp()))
           │
-          └──▶ Provides InheritedWidget context
+          └──▶ Provides UncontrolledProviderScope
 ```
 
 ### Initialization Example
@@ -558,23 +558,20 @@ final appEndpoints = <Endpoint>[
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### ValueNotifier Architecture
+### Riverpod Architecture
 
 ```dart
-// Each resource gets its own ValueNotifier for fine-grained updates
+// Each resource is managed by a StateNotifier provider family
+final resourceProvider = StateNotifierProvider.family<ResourceNotifier, ResourceState, ResourceKey>(
+  (ref, key) => ResourceNotifier(ref, key),
+);
+
+// StateManager orchestrates these providers
 class StateManager {
-  final Map<String, ValueNotifier<ResourceState>> _notifiers = {};
-  
-  ValueNotifier<ResourceState<T>> getNotifier<T>(String resourceId) {
-    return _notifiers.putIfAbsent(
-      resourceId,
-      () => ValueNotifier(const ResourceInitial()),
-    ) as ValueNotifier<ResourceState<T>>;
-  }
+  final ProviderContainer container;
   
   void updateState<T>(String resourceId, ResourceState<T> state) {
-    getNotifier<T>(resourceId).value = state;
-    // Only widgets listening to THIS resourceId rebuild
+    // Updates propagate through the container to all listeners (Consumers)
   }
 }
 ```
@@ -1044,9 +1041,9 @@ class SQLiteCacheProvider implements IStorageProvider {
 
 | Strategy | Implementation |
 |----------|----------------|
-| **Fine-grained updates** | Each resource has its own ValueNotifier; only affected widgets rebuild |
+| **Fine-grained updates** | Each resource has its own Provider; only affected Consumer widgets rebuild |
 | **Cache size limits** | Configure maximum cache entries to prevent memory bloat |
-| **Dispose resources** | StateManager disposes ValueNotifiers when resources are cleared |
+| **Dispose resources** | Riverpod handles disposal (autoDispose) or via ProviderContainer disposal |
 | **Lazy initialization** | Resources are only created when first accessed |
 
 ### Network Optimization

@@ -1,33 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../state/state_manager.dart';
+import '../core/fkernal_app.dart';
+import '../state/providers.dart';
 import 'auto_loading_widget.dart';
 import 'auto_error_widget.dart';
 
 /// Optional pagination builder for infinite scroll lists.
-///
-/// This widget simplifies building paginated lists with automatic
-/// load-more functionality and state management.
-///
-/// ```dart
-/// FKernalPaginatedBuilder<User>(
-///   resource: 'getUsers',
-///   pageSize: 20,
-///   builder: (context, items, hasMore, loadMore, isLoadingMore) {
-///     return ListView.builder(
-///       itemCount: items.length + (hasMore ? 1 : 0),
-///       itemBuilder: (context, index) {
-///         if (index == items.length) {
-///           return LoadMoreButton(onTap: loadMore, isLoading: isLoadingMore);
-///         }
-///         return UserTile(user: items[index]);
-///       },
-///     );
-///   },
-/// )
-/// ```
-class FKernalPaginatedBuilder<T> extends StatefulWidget {
+class FKernalPaginatedBuilder<T> extends ConsumerStatefulWidget {
   /// The endpoint resource ID.
   final String resource;
 
@@ -84,14 +64,12 @@ class FKernalPaginatedBuilder<T> extends StatefulWidget {
   });
 
   @override
-  State<FKernalPaginatedBuilder<T>> createState() =>
+  ConsumerState<FKernalPaginatedBuilder<T>> createState() =>
       _FKernalPaginatedBuilderState<T>();
 }
 
 class _FKernalPaginatedBuilderState<T>
-    extends State<FKernalPaginatedBuilder<T>> {
-  late StateManager _stateManager;
-
+    extends ConsumerState<FKernalPaginatedBuilder<T>> {
   final List<T> _items = [];
   int _currentPage = 1;
   bool _hasMore = true;
@@ -100,9 +78,8 @@ class _FKernalPaginatedBuilderState<T>
   Object? _error;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _stateManager = context.read<StateManager>();
+  void initState() {
+    super.initState();
     _loadPage(_currentPage);
   }
 
@@ -125,12 +102,13 @@ class _FKernalPaginatedBuilderState<T>
         ...?widget.extraParams,
       };
 
-      final result = await _stateManager.fetch<List<T>>(
-        widget.resource,
-        params: params,
-        pathParams: widget.pathParams,
-        forceRefresh: true,
-      );
+      final key = (widget.resource, params, widget.pathParams);
+
+      // Imperatively fetch using the resource notifier
+      final result =
+          await ref.read(resourceProvider(key).notifier).fetch<List<T>>(
+                forceRefresh: true,
+              );
 
       if (!mounted) return;
 
@@ -178,21 +156,31 @@ class _FKernalPaginatedBuilderState<T>
 
   @override
   Widget build(BuildContext context) {
+    final globalUI = FKernal.instance.config.globalUIConfig;
+
     // Initial loading state
     if (_isInitialLoading) {
-      return widget.loadingWidget ?? const AutoLoadingWidget();
+      return widget.loadingWidget ??
+          globalUI.loadingBuilder?.call(context) ??
+          const AutoLoadingWidget();
     }
 
     // Error state (only for initial load)
     if (_error != null && _items.isEmpty) {
-      return widget.errorBuilder != null
-          ? widget.errorBuilder!(context, _error, _retry)
-          : AutoErrorWidget(error: _error, onRetry: _retry);
+      if (widget.errorBuilder != null) {
+        return widget.errorBuilder!(context, _error, _retry);
+      }
+      if (globalUI.errorBuilder != null) {
+        return globalUI.errorBuilder!(context, _error, _retry);
+      }
+      return AutoErrorWidget(error: _error, onRetry: _retry);
     }
 
     // Empty state
     if (_items.isEmpty) {
-      return widget.emptyWidget ?? const Center(child: Text('No items found'));
+      return widget.emptyWidget ??
+          globalUI.emptyBuilder?.call(context) ??
+          const Center(child: Text('No items found'));
     }
 
     // Data state

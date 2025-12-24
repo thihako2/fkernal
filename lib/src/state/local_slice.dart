@@ -39,8 +39,12 @@ import 'package:flutter/foundation.dart';
 ///   builder: (context, state, update) => ...
 /// )
 /// ```
+import 'adapters/adapters.dart';
+
 class LocalSlice<T> extends ChangeNotifier {
-  T _state;
+  T _initialState;
+  LocalStateAdapter<T>? _adapter;
+
   final List<T> _history = [];
   final int maxHistoryLength;
   final bool enableHistory;
@@ -49,33 +53,49 @@ class LocalSlice<T> extends ChangeNotifier {
     required T initialState,
     this.maxHistoryLength = 50,
     this.enableHistory = false,
-  }) : _state = initialState;
+  }) : _initialState = initialState;
+
+  /// Lazily initializes the adapter using the global factory or default.
+  LocalStateAdapter<T> get adapter {
+    if (_adapter == null) {
+      if (LocalStateAdapter.defaultFactory != null) {
+        _adapter = LocalStateAdapter.defaultFactory!(_initialState);
+      } else {
+        _adapter = ValueNotifierLocalState(_initialState);
+      }
+      _adapter!.addListener(notifyListeners);
+    }
+    return _adapter!;
+  }
 
   /// The current state value.
-  T get state => _state;
+  T get state => adapter.state;
 
   /// Updates the state with a new value.
   void setState(T newState) {
+    // History management logic
+    // We assume the adapter handles the storage, we handle the history
     if (enableHistory) {
-      _history.add(_state);
+      // Use current state from adapter
+      _history.add(adapter.state);
       if (_history.length > maxHistoryLength) {
         _history.removeAt(0);
       }
     }
-    _state = newState;
-    notifyListeners();
+    adapter.setState(newState);
+    // Adapter notification handles triggering our listeners via the listener added in getter
   }
 
   /// Updates the state using a function that receives the current state.
   void update(T Function(T current) updater) {
-    setState(updater(_state));
+    setState(updater(adapter.state));
   }
 
-  /// Resets to initial state (if you store it).
+  /// Resets to initial state.
   void reset(T initialState) {
     _history.clear();
-    _state = initialState;
-    notifyListeners();
+    _initialState = initialState;
+    adapter.setState(initialState);
   }
 
   /// Whether undo is available.
@@ -84,14 +104,21 @@ class LocalSlice<T> extends ChangeNotifier {
   /// Undoes the last state change (if history is enabled).
   void undo() {
     if (_history.isNotEmpty) {
-      _state = _history.removeLast();
-      notifyListeners();
+      final previous = _history.removeLast();
+      // Directly set state without adding to history again
+      adapter.setState(previous);
     }
   }
 
   /// Clears history.
   void clearHistory() {
     _history.clear();
+  }
+
+  @override
+  void dispose() {
+    _adapter?.dispose();
+    super.dispose();
   }
 }
 
@@ -204,6 +231,7 @@ class MapSlice<K, V> extends LocalSlice<Map<K, V>> {
 
 /// A specialized slice for boolean toggles.
 class ToggleSlice extends ValueSlice<bool> {
+  // ignore: use_super_parameters - Keeping as positional for API compatibility
   ToggleSlice([bool initial = false]) : super(initial);
 
   /// Toggles the value.

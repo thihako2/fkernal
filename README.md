@@ -34,6 +34,17 @@ FKernal eliminates boilerplate by providing a centralized orchestration layer fo
 - [License](#-license)
 - [Contributing](#-contributing)
 
+## 📚 Documentation
+
+Deep dive into specific topics:
+
+- 🏛️ **[Architecture & Configuration](docs/architecture.md)**
+- 🌐 **[Networking](docs/networking.md)**
+- 🔄 **[State Management](docs/state_management.md)**
+- 💾 **[Caching Strategy](docs/caching.md)**
+- 🎨 **[Theming](docs/theming.md)**
+- 🔄 **[Migration Guide](docs/migration.md)**
+
 ---
 
 ## ✨ Features
@@ -41,7 +52,7 @@ FKernal eliminates boilerplate by providing a centralized orchestration layer fo
 | Feature | Description |
 |---------|-------------|
 | 🌐 **Declarative Networking** | Define endpoints as constants. No more repositories, clients, or interceptors. Supports REST out of the box with extension points for GraphQL/gRPC. |
-| 🔄 **Automatic State Management** | Every endpoint gets a reactive state slice with Loading, Data, and Error states. Built on `ValueNotifier` for fine-grained, efficient updates. |
+| 🔄 **Universal State Management** | Pluggable architecture supporting Riverpod (default), BLoC, GetX, MobX, Signals, or custom adapters. Every endpoint gets a unified `ResourceState`. |
 | 💾 **Smart Caching** | TTL-based caching with automatic invalidation on mutations. Supports Stale-While-Revalidate pattern. Backed by Hive for binary storage. |
 | 🎨 **Theming System** | Define theme tokens once, apply everywhere with dynamic light/dark switching. Full Material 3 support with automatic persistence. |
 | ⚠️ **Unified Error Handling** | All errors normalized into typed `FKernalError` objects with automatic retry logic, exponential backoff, and environment-aware logging. |
@@ -61,8 +72,10 @@ FKernal eliminates boilerplate by providing a centralized orchestration layer fo
 
 Add FKernal to your `pubspec.yaml`:
 
+```yaml
 dependencies:
-  fkernal: ^1.2.0
+  fkernal: ^1.3.0
+  flutter_riverpod: ^2.4.9
 ```
 
 Then run:
@@ -153,12 +166,15 @@ class MyApp extends StatelessWidget {
     return FKernalApp(
       child: Builder(
         builder: (context) {
-          final theme = context.watchThemeManager();
-          return MaterialApp(
-            theme: theme.lightTheme,
-            darkTheme: theme.darkTheme,
-            themeMode: theme.themeMode,
-            home: const HomeScreen(),
+          final themeManager = context.themeManager;
+          return ListenableBuilder(
+            listenable: themeManager,
+            builder: (context, _) => MaterialApp(
+              theme: themeManager.lightTheme,
+              darkTheme: themeManager.darkTheme,
+              themeMode: themeManager.themeMode,
+              home: const HomeScreen(),
+            ),
           );
         },
       ),
@@ -197,6 +213,8 @@ That's it! No BLoCs, no repositories, no API client setup.
 
 ## 📖 Core Concepts
 
+> 📘 See [Architecture Deep Dive](docs/architecture.md) for full details.
+
 ### Configuration
 
 `FKernalConfig` is the central hub for all framework behavior:
@@ -224,6 +242,8 @@ const config = FKernalConfig(
 
 ### Endpoints
 
+> 📘 See [Networking Deep Dive](docs/networking.md) for full details.
+
 Endpoints are immutable blueprints for your API layer:
 
 ```dart
@@ -247,6 +267,8 @@ Endpoint(
 - `CacheConfig.persistent` - 24 hours
 
 ### State Management
+
+> 📘 See [State Management Deep Dive](docs/state_management.md) for full details on adapters and local state.
 
 Every request is tracked as a `ResourceState<T>`:
 
@@ -394,7 +416,9 @@ context.themeManager;    // ThemeManager instance
 context.errorHandler;    // ErrorHandler instance
 
 // Theme
-context.watchThemeManager();    // Reactive theme
+// Theme
+// Use ListenableBuilder or AnimatedBuilder to listen to changes
+context.themeManager;    // ThemeManager instance (ChangeNotifier)
 context.themeManager.toggleTheme();  // Switch light/dark
 
 // Local State
@@ -406,6 +430,8 @@ context.updateLocal<int>('counter', (v) => v + 1);
 ---
 
 ## 🎨 Theming
+
+> 📘 See [Theming Deep Dive](docs/theming.md) for full details.
 
 Define your design system tokens:
 
@@ -577,6 +603,8 @@ parser: (json) => (json as List)
 ```
 
 ### 3. Leverage Cache Invalidation
+
+> See [Caching Deep Dive](docs/caching.md) for strategy details.
 Use `invalidates` to keep UI consistent without manual refreshes:
 ```dart
 Endpoint(
@@ -666,6 +694,113 @@ Yes! FKernal includes comprehensive error handling, automatic retry with exponen
 **After**: Endpoint config + FKernalBuilder with automatic state handling
 
 See the [full migration guide](https://github.com/thihako2/fkernal/blob/main/docs/migration.md) for detailed examples.
+
+---
+
+## Customization
+
+FKernal is designed to be 100% customizable, from UI components to networking logic.
+
+### Global UI Configuration
+Define default builders for loading, error, and empty states in `FKernalConfig`:
+
+```dart
+FKernal.init(
+  config: FKernalConfig(
+    baseUrl: '...',
+    globalUIConfig: GlobalUIConfig(
+      loadingBuilder: (context) => MyCustomSpinner(),
+      errorBuilder: (context, error, retry) => MyCustomError(error),
+      emptyBuilder: (context) => MyCustomEmptyState(),
+    ),
+  ),
+  endpoints: [...],
+);
+```
+
+### Custom Network Interceptors
+Add your own Dio interceptors without overriding the entire network client:
+
+```dart
+FKernalConfig(
+  interceptors: [
+    MyCustomLoggingInterceptor(),
+    AnalyticsInterceptor(),
+  ],
+)
+```
+
+### Advanced Riverpod Integration
+Override the `ProviderContainer` to provide custom service mocks or scoped providers:
+
+```dart
+FKernalConfig(
+  providerContainerOverride: myCustomContainer,
+)
+```
+
+---
+
+## Universal State Management
+
+FKernal is designed to be state-management agnostic. While it uses Riverpod internally by default for maximum performance, you can configure it to use your preferred solution for both global resources and local state.
+
+### Configuration
+
+Configure the internal engine in `FKernalConfig`:
+
+```dart
+FKernalConfig(
+  // Choose your global state manager
+  stateManagement: StateManagementType.bloc,
+  
+  // Provide the adapter implementation (required if not using defaults)
+  stateAdapter: MyBlocAdapter(),
+  
+  // Configure local state factory (e.g., to use Signals for local slices)
+  localStateFactory: <T>(initial) => SignalsLocalState<T>(initial),
+);
+```
+
+### Adapters
+
+To integrate a custom solution, implement `ResourceStateAdapter` for global resources or `LocalStateAdapter` for local state.
+
+### Bridges
+
+FKernal also provides drop-in bridges for popular packages if you prefer to use them alongside the default engine:
+
+#### BLoC / Cubit
+```dart
+import 'package:fkernal/fkernal_bloc.dart';
+
+class UserCubit extends ResourceCubit<User> {
+  UserCubit() : super('getUsers');
+}
+```
+
+#### Signals
+```dart
+import 'package:fkernal/fkernal_signals.dart';
+
+final userSignal = ResourceSignal<User>('getUsers');
+```
+
+#### GetX
+```dart
+import 'package:fkernal/fkernal_getx.dart';
+
+class UserController extends ResourceController<User> {
+  UserController() : super('getUsers');
+}
+```
+
+#### MobX
+```dart
+import 'package:fkernal/fkernal_mobx.dart';
+
+final userStore = ResourceStore<User>('getUsers');
+```
 
 ---
 

@@ -67,7 +67,7 @@ class FirebaseNetworkClient implements INetworkClient {
           final data = {...enrichedBody, 'id': doc.id};
           return data as T;
         } else {
-          Query query = _applyQueries(colRef, queryParams);
+          final query = _applyQueries(colRef, queryParams);
           final snapshot = await query.get();
           final list = snapshot.docs
               .map((d) =>
@@ -110,7 +110,7 @@ class FirebaseNetworkClient implements INetworkClient {
       });
     } else {
       // Watch Collection
-      Query query = _applyQueries(_firestore.collection(path), queryParams);
+      final query = _applyQueries(_firestore.collection(path), queryParams);
       return query.snapshots().map((snapshot) {
         final list = snapshot.docs
             .map((d) => _attachMetadata(d.data() as Map<String, dynamic>, d.id))

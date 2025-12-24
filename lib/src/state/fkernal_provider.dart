@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
-import 'package:provider/provider.dart';
 
+import '../core/fkernal_app.dart';
 import 'state_manager.dart';
 import 'resource_state.dart';
 
@@ -8,12 +8,13 @@ import 'resource_state.dart';
 class FKernalProvider {
   /// Gets the [StateManager] from context.
   static StateManager of(BuildContext context) {
-    return context.read<StateManager>();
+    return FKernal.instance.stateManager;
   }
 
   /// Watches the [StateManager] for changes.
+  @Deprecated('Use ref.watch in a ConsumerWidget')
   static StateManager watch(BuildContext context) {
-    return context.watch<StateManager>();
+    return FKernal.instance.stateManager;
   }
 }
 
@@ -23,6 +24,7 @@ class FKernalProvider {
 /// ```dart
 /// final users = useResource<List<User>>(context, 'getUsers');
 /// ```
+@Deprecated('Use ref.watch(resourceProvider(...)) in a ConsumerWidget')
 ResourceState<T> useResource<T>(
   BuildContext context,
   String endpointId, {
@@ -30,7 +32,7 @@ ResourceState<T> useResource<T>(
   Map<String, String>? pathParams,
   bool autoFetch = true,
 }) {
-  final stateManager = context.watch<StateManager>();
+  final stateManager = FKernal.instance.stateManager;
   final state = stateManager.getState<T>(
     endpointId,
     params: params,
@@ -60,7 +62,7 @@ Future<T> performAction<T>(
   dynamic payload,
   Map<String, String>? pathParams,
 }) {
-  final stateManager = context.read<StateManager>();
+  final stateManager = FKernal.instance.stateManager;
   return stateManager.performAction<T>(
     endpointId,
     payload: payload,
@@ -80,7 +82,7 @@ Future<T> refreshResource<T>(
   Map<String, dynamic>? params,
   Map<String, String>? pathParams,
 }) {
-  final stateManager = context.read<StateManager>();
+  final stateManager = FKernal.instance.stateManager;
   return stateManager.refresh<T>(
     endpointId,
     params: params,

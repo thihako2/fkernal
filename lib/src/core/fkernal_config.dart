@@ -1,8 +1,38 @@
+import 'package:flutter/widgets.dart';
+import 'package:dio/dio.dart';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../error/fkernal_error.dart';
 import '../storage/cache_config.dart';
 import '../theme/theme_config.dart';
+import '../state/adapters/state_adapter.dart';
+import '../state/adapters/local_state_adapter.dart';
 import 'environment.dart';
 import 'interfaces.dart';
+
+/// Global UI configuration for default builders.
+class GlobalUIConfig {
+  /// Default builder for loading states.
+  final Widget Function(BuildContext context)? loadingBuilder;
+
+  /// Default builder for error states.
+  final Widget Function(
+      BuildContext context, dynamic error, VoidCallback retry)? errorBuilder;
+
+  /// Default builder for empty states.
+  final Widget Function(BuildContext context)? emptyBuilder;
+
+  /// Default builder for "load more" indicators in paginated lists.
+  final Widget Function(BuildContext context, bool isLoading)?
+      loadMoreIndicatorBuilder;
+
+  const GlobalUIConfig({
+    this.loadingBuilder,
+    this.errorBuilder,
+    this.emptyBuilder,
+    this.loadMoreIndicatorBuilder,
+  });
+}
 
 /// Feature flags for enabling/disabling functionality.
 class FeatureFlags {
@@ -31,13 +61,8 @@ class FeatureFlags {
 }
 
 /// Authentication configuration.
-///
-/// All authentication features are opt-in. Use the configuration that fits your needs:
-/// - [AuthConfig.bearer] for static bearer token
-/// - [AuthConfig.apiKey] for API key authentication
-/// - Custom [tokenProvider] for dynamic tokens (e.g., from secure storage)
 class AuthConfig {
-  /// The authentication token (if using token-based auth).
+  /// The authentication token.
   final String? token;
 
   /// Custom headers to include in all requests.
@@ -50,21 +75,12 @@ class AuthConfig {
   final String apiKeyHeader;
 
   /// Optional: Token refresh callback.
-  ///
-  /// If provided, this will be called when a 401 response is received,
-  /// and the request will be retried with the new token.
   final Future<String?> Function()? onTokenRefresh;
 
   /// Optional: Dynamic token provider.
-  ///
-  /// If provided, this will be called before each request to get the current token.
-  /// Useful for tokens stored in secure storage that may change.
   final Future<String?> Function()? tokenProvider;
 
   /// Optional: Callback when token expires (receives 401).
-  ///
-  /// Called when a 401 is received and no [onTokenRefresh] is provided,
-  /// allowing the app to handle logout/redirect.
   final void Function()? onTokenExpired;
 
   const AuthConfig({
@@ -100,15 +116,6 @@ class AuthConfig {
   }
 
   /// Creates auth config with dynamic token provider.
-  ///
-  /// Useful when tokens are stored in secure storage and may change:
-  /// ```dart
-  /// AuthConfig.dynamic(
-  ///   tokenProvider: () => secureStorage.read('access_token'),
-  ///   onTokenRefresh: () => authService.refreshToken(),
-  ///   onTokenExpired: () => router.go('/login'),
-  /// )
-  /// ```
   factory AuthConfig.dynamic({
     required Future<String?> Function() tokenProvider,
     Future<String?> Function()? onTokenRefresh,
@@ -203,6 +210,12 @@ class FKernalConfig {
   /// Error behavior configuration.
   final ErrorConfig errorConfig;
 
+  /// Global UI configuration.
+  final GlobalUIConfig globalUIConfig;
+
+  /// Custom interceptors for the default network client.
+  final List<Interceptor> interceptors;
+
   /// Connection timeout in milliseconds.
   final int connectTimeout;
 
@@ -217,6 +230,26 @@ class FKernalConfig {
   /// Custom network client override.
   final INetworkClient? networkClientOverride;
 
+  /// Custom Riverpod ProviderContainer override.
+  final ProviderContainer? providerContainerOverride;
+
+  /// The chosen state management solution for APIs/resources.
+  /// Defaults to [StateManagementType.riverpod].
+  final StateManagementType stateManagement;
+
+  /// The chosen state management solution for local state (slices).
+  /// Defaults to [StateManagementType.riverpod].
+  final StateManagementType localStateManagement;
+
+  /// Custom adapter for resource state management.
+  /// Required if [stateManagement] is not riverpod or none.
+  final ResourceStateAdapter? stateAdapter;
+
+  /// Custom factory for local state adapters.
+  /// Required if [localStateManagement] is not riverpod or none.
+  final LocalStateAdapter<T> Function<T>(T initial, {bool enableHistory})?
+      localStateFactory;
+
   const FKernalConfig({
     required this.baseUrl,
     this.environment = Environment.development,
@@ -226,12 +259,19 @@ class FKernalConfig {
     this.theme,
     this.pagination = const PaginationConfig(),
     this.errorConfig = const ErrorConfig(),
+    this.globalUIConfig = const GlobalUIConfig(),
+    this.interceptors = const [],
     this.connectTimeout = 30000,
     this.receiveTimeout = 30000,
+    this.stateManagement = StateManagementType.riverpod,
+    this.localStateManagement = StateManagementType.riverpod,
+    this.stateAdapter,
+    this.localStateFactory,
     this.cacheProviderOverride,
     this.dataProviderOverride,
     this.secureProviderOverride,
     this.networkClientOverride,
+    this.providerContainerOverride,
   });
 
   /// Validates the configuration.
@@ -255,12 +295,20 @@ class FKernalConfig {
     ThemeConfig? theme,
     PaginationConfig? pagination,
     ErrorConfig? errorConfig,
+    GlobalUIConfig? globalUIConfig,
+    List<Interceptor>? interceptors,
     int? connectTimeout,
     int? receiveTimeout,
     IStorageProvider? cacheProviderOverride,
     IStorageProvider? dataProviderOverride,
     ISecureStorageProvider? secureProviderOverride,
     INetworkClient? networkClientOverride,
+    ProviderContainer? providerContainerOverride,
+    StateManagementType? stateManagement,
+    StateManagementType? localStateManagement,
+    ResourceStateAdapter? stateAdapter,
+    LocalStateAdapter<T> Function<T>(T initial, {bool enableHistory})?
+        localStateFactory,
   }) {
     return FKernalConfig(
       baseUrl: baseUrl ?? this.baseUrl,
@@ -271,6 +319,8 @@ class FKernalConfig {
       theme: theme ?? this.theme,
       pagination: pagination ?? this.pagination,
       errorConfig: errorConfig ?? this.errorConfig,
+      globalUIConfig: globalUIConfig ?? this.globalUIConfig,
+      interceptors: interceptors ?? this.interceptors,
       connectTimeout: connectTimeout ?? this.connectTimeout,
       receiveTimeout: receiveTimeout ?? this.receiveTimeout,
       cacheProviderOverride:
@@ -280,6 +330,12 @@ class FKernalConfig {
           secureProviderOverride ?? this.secureProviderOverride,
       networkClientOverride:
           networkClientOverride ?? this.networkClientOverride,
+      providerContainerOverride:
+          providerContainerOverride ?? this.providerContainerOverride,
+      stateManagement: stateManagement ?? this.stateManagement,
+      localStateManagement: localStateManagement ?? this.localStateManagement,
+      stateAdapter: stateAdapter ?? this.stateAdapter,
+      localStateFactory: localStateFactory ?? this.localStateFactory,
     );
   }
 }

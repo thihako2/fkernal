@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../core/fkernal_app.dart';
 import '../core/fkernal_config.dart';
@@ -16,31 +15,31 @@ import '../core/interfaces.dart';
 /// Extension methods on BuildContext for accessing FKernal services.
 extension FKernalContextExtensions on BuildContext {
   /// Gets the FKernal configuration.
-  FKernalConfig get fkernalConfig => read<FKernalConfig>();
+  FKernalConfig get fkernalConfig => FKernal.instance.config;
 
   /// Gets the FKernal instance.
   FKernal get fkernal => FKernal.instance;
 
   /// Gets the state manager.
-  StateManager get stateManager => read<StateManager>();
-
-  /// Watches the state manager for changes.
-  StateManager watchStateManager() => watch<StateManager>();
+  StateManager get stateManager => FKernal.instance.stateManager;
 
   /// Watches and returns the state for a resource.
   ///
-  /// This is the primary reactive API for consuming data in UI.
+  /// NOTE: With Riverpod migration, this extension method is no longer reactive
+  /// on a standard BuildContext. Use [ConsumerWidget] and `ref.watch` instead.
+  /// This method now just returns the current state snapshot.
+  @Deprecated('Use ref.watch(resourceProvider(...)) in a ConsumerWidget')
   ResourceState<T> useResource<T>(
     String endpointId, {
     Map<String, dynamic>? params,
     Map<String, String>? pathParams,
   }) {
-    return select<StateManager, ResourceState<T>>(
-      (m) => m.getState<T>(endpointId, params: params, pathParams: pathParams),
-    );
+    return stateManager.getState<T>(endpointId,
+        params: params, pathParams: pathParams);
   }
 
   /// Watches and returns the state for a resource using a type-safe key.
+  @Deprecated('Use ref.watch(resourceProvider(...)) in a ConsumerWidget')
   ResourceState<T> useResourceKey<T>(
     ResourceKey<T> key, {
     Map<String, dynamic>? params,
@@ -50,8 +49,6 @@ extension FKernalContextExtensions on BuildContext {
   }
 
   /// Returns a function to perform an action.
-  ///
-  /// This is the primary API for mutations in UI.
   Future<T> Function({dynamic payload, Map<String, String>? pathParams})
       useAction<T>(String endpointId) {
     return ({payload, pathParams}) => stateManager.performAction<T>(
@@ -62,22 +59,19 @@ extension FKernalContextExtensions on BuildContext {
   }
 
   /// Gets the network client.
-  INetworkClient get networkClient => read<INetworkClient>();
+  INetworkClient get networkClient => FKernal.instance.networkClient;
 
   /// Gets the storage manager.
-  StorageManager get storageManager => read<StorageManager>();
+  StorageManager get storageManager => FKernal.instance.storageManager;
 
   /// Gets the error handler.
-  ErrorHandler get errorHandler => read<ErrorHandler>();
+  ErrorHandler get errorHandler => FKernal.instance.errorHandler;
 
   /// Gets the theme manager.
-  ThemeManager get themeManager => read<ThemeManager>();
-
-  /// Watches the theme manager for changes.
-  ThemeManager watchThemeManager() => watch<ThemeManager>();
+  ThemeManager get themeManager => FKernal.instance.themeManager;
 
   /// Gets the endpoint registry.
-  EndpointRegistry get endpointRegistry => read<EndpointRegistry>();
+  EndpointRegistry get endpointRegistry => FKernal.instance.endpointRegistry;
 
   /// Fetches data from an endpoint.
   Future<T> fetchResource<T>(

@@ -1,6 +1,6 @@
 name: fkernal
 description: A configuration-driven Flutter framework that handles networking, state management, storage, error handling, and theming automatically.
-version: 1.2.0
+version: 1.3.0
 homepage: https://github.com/thihako2/fkernal.git
 
 environment:
@@ -10,10 +10,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_riverpod: ^2.4.9
   dio: ^5.4.0
   hive_flutter: ^1.1.0
   flutter_secure_storage: ^9.0.0
-  provider: ^6.1.1
   json_annotation: ^4.8.1
   path_provider: ^2.1.2
   connectivity_plus: ^5.0.2
@@ -29,6 +29,11 @@ dev_dependencies:
   flutter_lints: ^3.0.1
   build_runner: ^2.4.8
   json_serializable: ^6.7.1
+  # Optional state management bridges - users must add these to their own projects
+  flutter_bloc: ^8.1.3
+  signals_flutter: ^5.2.2
+  get: ^4.6.6
+  mobx: ^2.3.3+2
 
 topics:
   - fkernal

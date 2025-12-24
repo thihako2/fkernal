@@ -10,7 +10,6 @@
 // - Error handling
 // - Context extensions
 
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:fkernal/fkernal.dart';
 
@@ -55,12 +54,14 @@ class User implements FKernalModel {
 
   @override
   void validate() {
-    if (name.isEmpty)
+    if (name.isEmpty) {
       throw const FKernalError(
           type: FKernalErrorType.validation, message: 'Name required');
-    if (!email.contains('@'))
+    }
+    if (!email.contains('@')) {
       throw const FKernalError(
           type: FKernalErrorType.validation, message: 'Valid email required');
+    }
   }
 }
 
@@ -90,9 +91,10 @@ class Post implements FKernalModel {
 
   @override
   void validate() {
-    if (title.isEmpty)
+    if (title.isEmpty) {
       throw const FKernalError(
           type: FKernalErrorType.validation, message: 'Title required');
+    }
   }
 }
 
@@ -125,9 +127,10 @@ class Todo implements FKernalModel {
 
   @override
   void validate() {
-    if (title.isEmpty)
+    if (title.isEmpty) {
       throw const FKernalError(
           type: FKernalErrorType.validation, message: 'Title required');
+    }
   }
 }
 
@@ -184,7 +187,7 @@ final endpoints = <Endpoint>[
     id: 'getUsers',
     path: '/users',
     method: HttpMethod.get,
-    cacheConfig: CacheConfig(duration: Duration(minutes: 5)),
+    cacheConfig: const CacheConfig(duration: Duration(minutes: 5)),
     parser: (json) => (json as List)
         .map((u) => User.fromJson(Map<String, dynamic>.from(u)))
         .toList(),
@@ -194,7 +197,7 @@ final endpoints = <Endpoint>[
     id: 'getUser',
     path: '/users/{id}',
     method: HttpMethod.get,
-    cacheConfig: CacheConfig(duration: Duration(minutes: 10)),
+    cacheConfig: const CacheConfig(duration: Duration(minutes: 10)),
     parser: (json) => User.fromJson(Map<String, dynamic>.from(json)),
     description: 'Fetches user by ID',
   ),
@@ -268,6 +271,11 @@ void main() async {
         borderRadius: 12.0,
         defaultPadding: 16.0,
       ),
+      // UNIVERSAL STATE MANAGEMENT CONFIGURATION
+      // FKernal uses Riverpod by default, but you can switch engines:
+      // stateManagement: StateManagementType.riverpod, // default
+      // stateManagement: StateManagementType.bloc,
+      // stateManagement: StateManagementType.getx,
     ),
     endpoints: endpoints,
   );
@@ -283,14 +291,17 @@ class FKernalDemoApp extends StatelessWidget {
     return FKernalApp(
       child: Builder(
         builder: (context) {
-          final themeManager = context.watchThemeManager();
-          return MaterialApp(
-            title: 'FKernal Complete Demo',
-            debugShowCheckedModeBanner: false,
-            theme: themeManager.lightTheme,
-            darkTheme: themeManager.darkTheme,
-            themeMode: themeManager.themeMode,
-            home: const HomeScreen(),
+          final themeManager = context.themeManager;
+          return ListenableBuilder(
+            listenable: themeManager,
+            builder: (context, _) => MaterialApp(
+              title: 'FKernal Complete Demo',
+              debugShowCheckedModeBanner: false,
+              theme: themeManager.lightTheme,
+              darkTheme: themeManager.darkTheme,
+              themeMode: themeManager.themeMode,
+              home: const HomeScreen(),
+            ),
           );
         },
       ),
@@ -314,13 +325,17 @@ class HomeScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('FKernal Demo'),
         actions: [
-          IconButton(
-            icon: Icon(context.watchThemeManager().themeMode == ThemeMode.dark
-                ? Icons.light_mode
-                : Icons.dark_mode),
-            onPressed: () => context.themeManager.toggleTheme(),
-            tooltip: 'Toggle Theme',
-          ),
+          ListenableBuilder(
+              listenable: context.themeManager,
+              builder: (context, _) {
+                return IconButton(
+                  icon: Icon(context.themeManager.themeMode == ThemeMode.dark
+                      ? Icons.light_mode
+                      : Icons.dark_mode),
+                  onPressed: () => context.themeManager.toggleTheme(),
+                  tooltip: 'Toggle Theme',
+                );
+              }),
         ],
       ),
       body: ListView(
@@ -385,7 +400,7 @@ class HomeScreen extends StatelessWidget {
           _DemoCard(
             icon: Icons.check_circle,
             title: 'Todos',
-            subtitle: 'Hook-style API with useResource',
+            subtitle: 'Resource filtering and computed state',
             color: colorScheme.tertiary,
             onTap: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const TodosScreen())),
@@ -439,7 +454,7 @@ class _DemoCard extends StatelessWidget {
     return Card(
       child: ListTile(
         leading: CircleAvatar(
-            backgroundColor: color.withOpacity(0.1),
+            backgroundColor: color.withValues(alpha: 0.1),
             child: Icon(icon, color: color)),
         title: Text(title),
         subtitle: Text(subtitle),
@@ -553,13 +568,15 @@ class UsersScreen extends StatelessWidget {
       await context.performAction<User>('createUser',
           payload: User(
               name: 'New User', email: 'new@example.com', username: 'newuser'));
-      if (context.mounted)
+      if (context.mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('User created!')));
+      }
     } catch (e) {
-      if (context.mounted)
+      if (context.mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     }
   }
 }
@@ -608,7 +625,7 @@ class PostsScreen extends StatelessWidget {
 }
 
 // ============================================================================
-// TODOS SCREEN - Hook-style API
+// TODOS SCREEN - Resource filtering
 // ============================================================================
 
 class TodosScreen extends StatelessWidget {

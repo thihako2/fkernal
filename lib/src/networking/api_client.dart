@@ -63,6 +63,11 @@ class ApiClient implements INetworkClient {
     );
 
     _setupInterceptors();
+
+    // Add custom interceptors from config
+    if (config.interceptors.isNotEmpty) {
+      _dio.interceptors.addAll(config.interceptors);
+    }
   }
 
   void _setupInterceptors() {
@@ -263,8 +268,8 @@ class ApiClient implements INetworkClient {
       params.entries.toList()..sort((a, b) => a.key.compareTo(b.key)),
     );
     final query =
-        sortedParams.entries.map((e) => "${e.key}=${e.value}").join("&");
-    return "$path?$query";
+        sortedParams.entries.map((e) => '${e.key}=${e.value}').join('&');
+    return '$path?$query';
   }
 
   @override

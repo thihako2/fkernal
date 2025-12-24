@@ -250,6 +250,7 @@ packages/fkernal/
 │       │   ├── endpoint_registry.dart
 │       │   └── http_method.dart
 │       ├── state/             # State management
+│       │   ├── adapters/          # Universal state adapters
 │       │   ├── state_manager.dart
 │       │   ├── resource_state.dart
 │       │   ├── local_slice.dart

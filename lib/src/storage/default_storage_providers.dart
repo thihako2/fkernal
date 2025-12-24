@@ -11,6 +11,7 @@ class HiveStorageProvider implements IStorageProvider {
 
   @override
   Future<void> init() async {
+    await Hive.initFlutter();
     if (!Hive.isBoxOpen(boxName)) {
       _box = await Hive.openBox(boxName);
     } else {

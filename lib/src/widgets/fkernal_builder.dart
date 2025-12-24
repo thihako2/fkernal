@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/fkernal_app.dart';
 import '../state/resource_state.dart';
-import '../state/state_manager.dart';
+import '../state/providers.dart';
 import 'auto_loading_widget.dart';
 import 'auto_error_widget.dart';
 
 /// Builder widget for consuming resource state from endpoints.
-class FKernalBuilder<T> extends StatefulWidget {
+class FKernalBuilder<T> extends ConsumerStatefulWidget {
   final String resource;
   final Map<String, dynamic>? params;
   final Map<String, String>? pathParams;
@@ -21,7 +22,6 @@ class FKernalBuilder<T> extends StatefulWidget {
   final Widget? emptyWidget;
   final void Function(T data)? onData;
   final void Function(dynamic error)? onError;
-  final bool watch;
 
   const FKernalBuilder({
     super.key,
@@ -36,107 +36,89 @@ class FKernalBuilder<T> extends StatefulWidget {
     this.emptyWidget,
     this.onData,
     this.onError,
-    this.watch = false,
   }) : assert(builder != null || customBuilder != null);
 
   @override
-  State<FKernalBuilder<T>> createState() => _FKernalBuilderState<T>();
+  ConsumerState<FKernalBuilder<T>> createState() => _FKernalBuilderState<T>();
 }
 
-class _FKernalBuilderState<T> extends State<FKernalBuilder<T>> {
-  late StateManager _stateManager;
-
+class _FKernalBuilderState<T> extends ConsumerState<FKernalBuilder<T>> {
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _stateManager = context.read<StateManager>();
-    if (widget.watch) {
-      _watch();
-    } else if (widget.autoFetch) {
-      _fetch();
+  void initState() {
+    super.initState();
+    if (widget.autoFetch) {
+      _fetchIfInitial();
     }
   }
 
-  @override
-  void didUpdateWidget(FKernalBuilder<T> oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.resource != oldWidget.resource ||
-        widget.params != oldWidget.params ||
-        widget.pathParams != oldWidget.pathParams ||
-        widget.watch != oldWidget.watch) {
-      if (widget.watch) {
-        _watch();
-      } else {
-        _fetch();
-      }
-    }
-  }
-
-  void _watch() {
+  void _fetchIfInitial() {
+    // We defer to next frame to ensure providers are ready or just run it.
+    // With Riverpod, we can just read the notifier and call fetch.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _stateManager.watch<T>(
-        widget.resource,
-        params: widget.params,
-        pathParams: widget.pathParams,
-      );
-    });
-  }
 
-  void _fetch() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _stateManager.fetch<T>(
-        widget.resource,
-        params: widget.params,
-        pathParams: widget.pathParams,
-      );
+      final key = (widget.resource, widget.params, widget.pathParams);
+      // Check if already loaded to avoid redundant fetches if autoFetch is on
+      // But resourceProvider defaults to Initial, so we usually want to fetch.
+      // The notifier's logic handles deduplication.
+      ref.read(resourceProvider(key).notifier).fetch<T>();
     });
   }
 
   void _retry() {
-    _stateManager.refresh<T>(
-      widget.resource,
-      params: widget.params,
-      pathParams: widget.pathParams,
-    );
+    final key = (widget.resource, widget.params, widget.pathParams);
+    ref.read(resourceProvider(key).notifier).fetch<T>(forceRefresh: true);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Listen to the specific resource instead of the whole StateManager
-    return ValueListenableBuilder<ResourceState<T>>(
-      valueListenable: _stateManager.getListenable<T>(
-        widget.resource,
-        params: widget.params,
-        pathParams: widget.pathParams,
-      ),
-      builder: (context, state, child) {
-        // Call callbacks
-        if (state is ResourceData<T> && widget.onData != null) {
-          WidgetsBinding.instance
-              .addPostFrameCallback((_) => widget.onData!(state.data));
-        }
-        if (state is ResourceError<T> && widget.onError != null) {
-          WidgetsBinding.instance
-              .addPostFrameCallback((_) => widget.onError!(state.error));
-        }
+    final key = (widget.resource, widget.params, widget.pathParams);
+    final rawState = ref.watch(resourceProvider(key));
 
-        if (widget.customBuilder != null) {
-          return widget.customBuilder!(context, state);
-        }
+    // Handle type casting safely, especially for initial state which defaults to dynamic
+    ResourceState<T> state;
+    if (rawState is ResourceState<T>) {
+      state = rawState;
+    } else if (rawState is ResourceInitial) {
+      // If untyped initial state, convert to typed initial state
+      state = ResourceInitial<T>();
+    } else {
+      // For other states, we expect them to match T. If not, it's a usage error
+      // (conflicting types for same resource), so we let the cast fail.
+      state = rawState as ResourceState<T>;
+    }
 
-        return switch (state) {
-          ResourceLoading() =>
-            widget.loadingWidget ?? const AutoLoadingWidget(),
-          ResourceData(:final data) => widget.builder!(context, data),
-          ResourceError(:final error) => widget.errorBuilder != null
-              ? widget.errorBuilder!(context, error, _retry)
-              : AutoErrorWidget(error: error, onRetry: _retry),
-          ResourceInitial() =>
-            widget.loadingWidget ?? const AutoLoadingWidget(),
-        };
-      },
-    );
+    // Handle side effects (callbacks)
+    ref.listen(resourceProvider(key), (previous, next) {
+      if (next is ResourceData<T> && widget.onData != null) {
+        // Check if data actually changed or just refetched?
+        // Riverpod might notify even if same object if not using equatable.
+        // ResourceState is sealed, data equality depends on T.
+        // We'll just call it.
+        widget.onData!(next.data);
+      } else if (next is ResourceError<T> && widget.onError != null) {
+        widget.onError!(next.error);
+      }
+    });
+
+    if (widget.customBuilder != null) {
+      return widget.customBuilder!(context, state);
+    }
+
+    final globalUI = FKernal.instance.config.globalUIConfig;
+
+    return switch (state) {
+      ResourceLoading() => widget.loadingWidget ??
+          globalUI.loadingBuilder?.call(context) ??
+          const AutoLoadingWidget(),
+      ResourceData(:final data) => widget.builder!(context, data),
+      ResourceError(:final error) => widget.errorBuilder != null
+          ? widget.errorBuilder!(context, error, _retry)
+          : globalUI.errorBuilder?.call(context, error, _retry) ??
+              AutoErrorWidget(error: error, onRetry: _retry),
+      ResourceInitial() => widget.loadingWidget ??
+          globalUI.loadingBuilder?.call(context) ??
+          const AutoLoadingWidget(),
+    };
   }
 }

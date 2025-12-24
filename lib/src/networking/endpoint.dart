@@ -145,4 +145,36 @@ class Endpoint {
 
   @override
   String toString() => 'Endpoint($id: ${method.value} $path)';
+
+  /// Resolves the path by substituting path parameters.
+  static String resolvePath(String path, Map<String, String>? pathParams) {
+    if (pathParams == null || pathParams.isEmpty) return path;
+    var resolvedPath = path;
+    pathParams.forEach((key, value) {
+      resolvedPath = resolvedPath.replaceAll('{$key}', value);
+    });
+    return resolvedPath;
+  }
+
+  /// Builds a cache key (or unique resource ID) from a path and query parameters.
+  static String buildCacheKey(
+      String resolvedPath, Map<String, dynamic>? params) {
+    if (params == null || params.isEmpty) return resolvedPath;
+    final sortedParams = Map.fromEntries(
+      params.entries.toList()..sort((a, b) => a.key.compareTo(b.key)),
+    );
+    final query =
+        sortedParams.entries.map((e) => '${e.key}=${e.value}').join('&');
+    return '$resolvedPath?$query';
+  }
+
+  /// Generates a unique resource ID for an endpoint request.
+  static String generateKey(
+    Endpoint endpoint, {
+    Map<String, dynamic>? params,
+    Map<String, String>? pathParams,
+  }) {
+    final resolvedPath = resolvePath(endpoint.path, pathParams);
+    return buildCacheKey(resolvedPath, params);
+  }
 }
