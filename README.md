@@ -1,273 +1,520 @@
 # FKernal 🚀
 
-**The Configuration-Driven Flutter Kernal**
+[![Pub Version](https://img.shields.io/pub/v/fkernal)](https://pub.dev/packages/fkernal)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Flutter](https://img.shields.io/badge/Flutter-3.10+-blue.svg)](https://flutter.dev)
 
-FKernal is a production-grade, architectural foundation for Flutter applications. It is designed to solve "boilerplate fatigue" by providing a centralized orchestration layer for the most complex aspects of app development: **Networking, State Transitions, Persistence, Error Recovery, and Design Systems**.
+**The Configuration-Driven Flutter Kernel** — Build production-grade Flutter apps in a fraction of the time.
 
-By leveraging a declarative configuration model, FKernal enables developers to build scalable, resilient features in a fraction of the time, while maintaining perfect separation of concerns.
-
----
-
-## 📑 Table of Contents
-- [1. Architecture Philosophy](#1-architecture-philosophy)
-- [2. Installation & Setup](#2-installation--setup)
-- [3. Core Configuration (Deep Dive)](#3-core-configuration-deep-dive)
-  - [FKernalConfig](#fkernalconfig)
-  - [Feature Flags](#feature-flags)
-  - [Authentication (AuthConfig)](#authentication-authconfig)
-- [4. Declarative Networking](#4-declarative-networking)
-  - [Endpoint Definition](#endpoint-definition)
-  - [Response Parsing](#response-parsing)
-  - [Automatic Retry System](#automatic-retry-system)
-- [5. State Management Engine](#5-state-management-engine)
-  - [ResourceState Lifecycle](#resourcestate-lifecycle)
-  - [Request Deduplication](#request-deduplication)
-  - [Local UI State (Slices)](#local-ui-state-slices)
-- [6. Persistence & Caching](#6-persistence--caching)
-  - [TTL Systems](#ttl-systems)
-  - [Secure Storage](#secure-storage)
-- [7. Widget Reference (Full API)](#7-widget-reference-full-api)
-  - [FKernalBuilder](#fkernalbuilder)
-  - [FKernalActionBuilder](#fkernalactionbuilder)
-  - [Local State Builders](#local-state-builders)
-- [8. Extension Library](#8-extension-library)
-- [9. Theming & Styling](#9-theming--styling)
-- [10. Logging & Debugging](#10-logging--debugging)
-- [11. Best Practices](#11-best-practices)
+FKernal eliminates boilerplate by providing a centralized orchestration layer for **Networking, State Management, Persistence, Error Recovery, and Design Systems**. Define your endpoints and theme tokens once — FKernal handles everything else automatically.
 
 ---
 
-## 🏗 1. Architecture Philosophy
+## ✨ Features
 
-FKernal is built on the principle of **"Configuration over Implementation"**. In a standard Flutter app, a single feature often requires manual wiring of repositories, BLoCs, caching, and loading/error UI logic.
-
-**With FKernal**, you define the **Endpoint** and **Theme tokens** once. The framework then automatically:
-1.  **Orchestrates Networking**: Handles HTTP methods, headers, and timeouts via Dio.
-2.  **Manages State**: Generates reactive slices that transition between Loading, Data, and Error.
-3.  **Persists Data**: Synchronizes network responses with a Hive-backed local cache.
-4.  **Handles Errors**: Normalizes all platform-specific exceptions into a unified `FKernalError` system.
+| Feature | Description |
+|---------|-------------|
+| 🌐 **Declarative Networking** | Define endpoints as constants. No more repositories, clients, or interceptors. |
+| 🔄 **Automatic State Management** | Every endpoint gets a reactive state slice with Loading, Data, and Error states. |
+| 💾 **Smart Caching** | TTL-based caching with automatic invalidation on mutations. |
+| 🎨 **Theming System** | Define theme tokens once, apply everywhere with dynamic light/dark switching. |
+| ⚠️ **Unified Error Handling** | All errors normalized into typed `FKernalError` objects. |
+| 📦 **Local State Slices** | Manage UI state with Value, Toggle, Counter, List, and Map slices. |
+| 🔌 **Extensible Architecture** | Override network client, storage providers, and add observers. |
 
 ---
 
-## 🚀 2. Installation & Setup
+## 📦 Installation
 
-### Add Dependency
 ```yaml
 dependencies:
   fkernal: ^1.0.0
 ```
 
-### Quick Startup
+Then run:
+```bash
+flutter pub get
+```
+
+---
+
+## 🚀 Quick Start
+
+### 1. Initialize FKernal
+
 ```dart
+import 'package:fkernal/fkernal.dart';
+import 'package:flutter/material.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   await FKernal.init(
-    config: FKernalConfig(baseUrl: 'https://api.example.com'),
-    endpoints: [/* Your Endpoints */],
+    config: const FKernalConfig(
+      baseUrl: 'https://api.example.com',
+      environment: Environment.development,
+      theme: ThemeConfig(
+        primaryColor: Color(0xFF6366F1),
+        useMaterial3: true,
+      ),
+    ),
+    endpoints: [
+      Endpoint(
+        id: 'getUsers',
+        path: '/users',
+        parser: (json) => (json as List)
+            .map((u) => User.fromJson(u))
+            .toList(),
+      ),
+      Endpoint(
+        id: 'createUser',
+        path: '/users',
+        method: HttpMethod.post,
+        invalidates: ['getUsers'], // Auto-refresh users list
+      ),
+    ],
   );
+
+  runApp(const MyApp());
+}
+```
+
+### 2. Wrap Your App
+
+```dart
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return FKernalApp(
+      child: Builder(
+        builder: (context) {
+          final theme = context.watchThemeManager();
+          return MaterialApp(
+            theme: theme.lightTheme,
+            darkTheme: theme.darkTheme,
+            themeMode: theme.themeMode,
+            home: const HomeScreen(),
+          );
+        },
+      ),
+    );
+  }
+}
+```
+
+### 3. Consume Data
+
+```dart
+class UsersScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: FKernalBuilder<List<User>>(
+        resource: 'getUsers',
+        builder: (context, users) => ListView.builder(
+          itemCount: users.length,
+          itemBuilder: (_, i) => ListTile(title: Text(users[i].name)),
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => context.performAction('createUser', 
+          payload: {'name': 'New User'}),
+        child: Icon(Icons.add),
+      ),
+    );
+  }
+}
+```
+
+That's it! No BLoCs, no repositories, no API client setup.
+
+---
+
+## 📖 Core Concepts
+
+### Configuration
+
+`FKernalConfig` is the central hub for all framework behavior:
+
+```dart
+const config = FKernalConfig(
+  baseUrl: 'https://api.example.com',
+  environment: Environment.production,
   
-  runApp(FKernalApp(child: MyApp()));
+  features: FeatureFlags(
+    enableCache: true,
+    enableAutoRetry: true,
+    maxRetryAttempts: 3,
+    enableLogging: false,
+  ),
+  
+  defaultCacheConfig: CacheConfig(
+    duration: Duration(minutes: 5),
+  ),
+  
+  connectTimeout: 30000,
+  receiveTimeout: 30000,
+);
+```
+
+### Endpoints
+
+Endpoints are immutable blueprints for your API layer:
+
+```dart
+Endpoint(
+  id: 'getUser',              // Unique identifier
+  path: '/users/{id}',        // Path with parameters
+  method: HttpMethod.get,     // HTTP method
+  cacheConfig: CacheConfig.medium,  // 5-minute TTL
+  requiresAuth: true,         // Add auth headers
+  invalidates: ['getUsers'],  // Clear on success
+  parser: (json) => User.fromJson(json),
+  description: 'Fetches a user by ID',
+)
+```
+
+**Cache Presets:**
+- `CacheConfig.none` - Always fetch fresh
+- `CacheConfig.short` - 1 minute
+- `CacheConfig.medium` - 5 minutes
+- `CacheConfig.long` - 1 hour
+- `CacheConfig.persistent` - 24 hours
+
+### State Management
+
+Every request is tracked as a `ResourceState<T>`:
+
+```dart
+// Pattern matching (recommended)
+switch (state) {
+  ResourceLoading() => CircularProgressIndicator(),
+  ResourceData(:final data) => Text(data.name),
+  ResourceError(:final error) => Text(error.message),
+  _ => SizedBox(),
 }
 ```
 
 ---
 
-## ⚙️ 3. Core Configuration (Deep Dive)
+## 🧩 Widgets Reference
 
-### FKernalConfig
-The central hub for all framework behavior.
+### FKernalBuilder
 
-| Property | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `baseUrl` | `String` | **Required** | The primary URL for all API requests. |
-| `environment` | `Environment` | `dev` | Affects logging and error masking (`dev`, `staging`, `prod`). |
-| `connectTimeout` | `int` | `30000` | Connection timeout in milliseconds. |
-| `defaultPageSize` | `int` | `20` | Standard size for paginated requests. |
-
-### Feature Flags
-Granular control over framework capabilities.
+The primary widget for consuming API data:
 
 ```dart
-features: FeatureFlags(
-  enableCache: true,          // Toggles the Hive response cache
-  enableAutoRetry: true,       // Exponential backoff for network failures
-  maxRetryAttempts: 3,         // Retry limit for 5xx and timeouts
-  enableLogging: true,         // Visual Dio logs in the console
-  enableOffline: false,        // Persistent fallback for offline use
+FKernalBuilder<List<User>>(
+  resource: 'getUsers',
+  params: {'limit': 10},           // Query parameters
+  pathParams: {'orgId': '123'},    // Path parameters
+  autoFetch: true,                 // Fetch on mount
+  
+  builder: (context, users) => ListView(...),
+  
+  loadingWidget: ShimmerLoading(), // Custom loading
+  errorBuilder: (ctx, err, retry) => RetryButton(err, retry),
+  emptyWidget: EmptyState(),
+  
+  onData: (users) => print('Got ${users.length} users'),
+  onError: (error) => analytics.log(error),
 )
 ```
 
-### Authentication (AuthConfig)
-FKernal handles complex auth flows including automatic token refreshment.
+### Local State Builders
+
+For non-API state (forms, UI toggles, etc.):
 
 ```dart
-final auth = AuthConfig.bearer(
-  'initial-token',
-  onTokenRefresh: () async {
-    final response = await manualRefreshCall();
-    return response.token; // FKernal automatically retries the failed 401 request with this new token
-  },
-);
-```
-
----
-
-## 📡 4. Declarative Networking
-
-### Endpoint Definition
-Endpoints are immutable blueprints for your data layer.
-
-```dart
-Endpoint(
-  id: 'getUsers',
-  path: '/users',
-  method: HttpMethod.get,
-  cacheConfig: CacheConfig.medium,    // 5-minute TTL
-  requiresAuth: true,                 // Adds Authorization headers automatically
-  invalidates: ['getStats'],          // Clears 'getStats' cache when this is triggered
+// Complex state with history
+FKernalLocalBuilder<CalculatorState>(
+  slice: 'calculator',
+  create: () => LocalSlice(initialState: CalculatorState()),
+  builder: (context, state, update) => Column(
+    children: [
+      Text(state.display),
+      ElevatedButton(
+        onPressed: () => update((s) => s.copyWith(display: '0')),
+        child: Text('Clear'),
+      ),
+    ],
+  ),
 )
-```
 
-### Response Parsing
-FKernal produces the internal `ResourceState<T>` where `T` is your model.
-
-```dart
-Endpoint(
-  id: 'getUser',
-  path: '/users/{id}',
-  parser: (json) => User.fromJson(json), // Automatic conversion from JSON to Object
+// Simple toggle
+FKernalToggleBuilder(
+  slice: 'darkMode',
+  create: () => ToggleSlice(false),
+  builder: (context, value, toggle) => Switch(
+    value: value,
+    onChanged: (_) => toggle.toggle(),
+  ),
 )
-```
 
----
+// Counter with bounds
+FKernalCounterBuilder(
+  slice: 'quantity',
+  create: () => CounterSlice(initial: 1, min: 1, max: 99),
+  builder: (context, value, counter) => Row(
+    children: [
+      IconButton(onPressed: counter.decrement, icon: Icon(Icons.remove)),
+      Text('$value'),
+      IconButton(onPressed: counter.increment, icon: Icon(Icons.add)),
+    ],
+  ),
+)
 
-## 🔄 5. State Management Engine
-
-### ResourceState Lifecycle
-Every request is tracked as a `ResourceState`, which is a sealed class:
-- **`ResourceInitial`**: Resting state before any interaction.
-- **`ResourceLoading`**: Request in flight. Contains `previousData` to allow for smooth UI transitions (no flicker).
-- **`ResourceData`**: Contains the parsed `data`, a `fetchedAt` timestamp, and a `fromCache` flag.
-- **`ResourceError`**: Contains a typed `FKernalError`.
-
-### Request Deduplication
-If multiple widgets request `getUsers` simultaneously, FKernal detects the collision and fires **only one network request**. All widgets share the same future and state transition.
-
-### Local UI State (Slices)
-For non-API state (temporary UI toggles, multi-step forms), use specialized slices:
-- **`ValueSlice<T>`**: Generic value container.
-- **`ToggleSlice`**: Specialized boolean container with `toggle()` helper.
-- **`CounterSlice`**: Integer container with `increment()`/`decrement()` bounded by min/max.
-- **`ListSlice<T>`**: Full list management with built-in history and undo support.
-
----
-
-## 💾 6. Persistence & Caching
-
-### TTL Systems
-Define Exactly how long data should live:
-- `CacheConfig.none`: Always fetch from network.
-- `CacheConfig.short`: 1-minute TTL.
-- `CacheConfig.medium`: 5-minute TTL (Recommended for most GET requests).
-- `CacheConfig.long`: 1-hour TTL.
-- `CacheConfig.persistent`: 24-hour TTL.
-
-### Secure Storage
-FKernal wraps `flutter_secure_storage` for high-security persistence:
-```dart
-await context.storageManager.setSecure('api_token', 'xyz...');
-final token = await context.storageManager.getSecure('api_token');
-```
-
----
-
-## 🧱 7. Widget Reference (Full API)
-
-### FKernalBuilder<T>
-The primary way to consume data.
-
-| Attribute | Type | Description |
-| :--- | :--- | :--- |
-| `resource` | `String` | The unique ID of the endpoint. |
-| `params` | `Map` | Query parameters (e.g., `{'q': 'search'}`). |
-| `pathParams` | `Map` | Path variables (e.g., replaces `{id}`). |
-| `autoFetch` | `bool` | Automatically fire the request on mount. (Default: `true`) |
-| `builder` | `fn` | UI builder for the `data` state. |
-| `loadingWidget` | `Widget` | Custom widget to show during first load. |
-
-### FKernalActionBuilder<T>
-The engine for mutations (POST/PUT/DELETE).
-
-```dart
-FKernalActionBuilder<User>(
-  action: 'createUser',
-  showSuccessSnackbar: true,
-  successMessage: 'User created successfully!',
-  builder: (context, perform, state) => ElevatedButton(
-    onPressed: state.isLoading ? null : () => perform(formData),
-    child: Text('Create'),
+// List management
+FKernalListBuilder<String>(
+  slice: 'tags',
+  create: () => ListSlice(['flutter', 'dart']),
+  builder: (context, items, slice) => Wrap(
+    children: [
+      ...items.map((tag) => Chip(
+        label: Text(tag),
+        onDeleted: () => slice.remove(tag),
+      )),
+      ActionChip(
+        label: Text('Add'),
+        onPressed: () => slice.add('new-tag'),
+      ),
+    ],
   ),
 )
 ```
 
----
-
-## 📊 8. Extension Library
-FKernal extends `BuildContext` to provide a zero-effort developer experience.
-
-| Method | Returns | Description |
-| :--- | :--- | :--- |
-| `context.stateManager` | `StateManager` | Access the global orchestrator. |
-| `context.apiClient` | `ApiClient` | Direct access to the Dio-wrapped client. |
-| `context.localState<T>(id)` | `T` | Current value of a local state slice. |
-| `context.localSlice<T>(id)` | `LocalSlice<T>` | Access the full slice object. |
-| `context.updateLocal<T>(id, fn)`| `void` | Update a local state slice reactively. |
-| `context.fetchResource(id)` | `Future` | Trigger an imperative data fetch. |
-| `context.performAction(id)` | `Future` | Trigger an imperative mutation. |
-| `context.refreshResource(id)` | `Future` | Force a network re-fetch (ignores cache). |
-
----
-
-## 🎨 9. Theming & Styling
-
-FKernal includes a robust design system orchestrator that maps your brand tokens to Material 3 `ThemeData`.
+### Built-in UI Widgets
 
 ```dart
-final theme = ThemeConfig(
+// Loading indicator
+AutoLoadingWidget(
+  size: 40,
+  message: 'Loading users...',
+)
+
+// Error with retry
+AutoErrorWidget(
+  error: FKernalError.network('Connection failed'),
+  onRetry: () => context.refreshResource('getUsers'),
+  compact: false,
+)
+
+// Empty state
+AutoEmptyWidget(
+  title: 'No Users',
+  subtitle: 'Add your first user to get started',
+  icon: Icons.people_outline,
+  actionText: 'Add User',
+  onAction: () => showAddUserDialog(context),
+)
+```
+
+---
+
+## 🔧 Context Extensions
+
+Access FKernal services from any widget:
+
+```dart
+// State Management
+context.useResource<List<User>>('getUsers');      // Reactive state
+context.fetchResource<List<User>>('getUsers');    // Imperative fetch
+context.refreshResource<List<User>>('getUsers');  // Force refresh
+context.performAction<User>('createUser', payload: user);
+
+// Managers
+context.stateManager;    // StateManager instance
+context.storageManager;  // StorageManager instance
+context.themeManager;    // ThemeManager instance
+context.errorHandler;    // ErrorHandler instance
+
+// Theme
+context.watchThemeManager();    // Reactive theme
+context.themeManager.toggleTheme();  // Switch light/dark
+
+// Local State
+context.localState<int>('counter');     // Get value
+context.localSlice<int>('counter');     // Get slice
+context.updateLocal<int>('counter', (v) => v + 1);
+```
+
+---
+
+## 🎨 Theming
+
+Define your design system tokens:
+
+```dart
+const theme = ThemeConfig(
   primaryColor: Color(0xFF6366F1),
-  fontFamily: 'Outfit',
-  borderRadius: 12.0,
+  secondaryColor: Color(0xFF8B5CF6),
+  
   useMaterial3: true,
-  defaultThemeMode: ThemeMode.dark,
+  defaultThemeMode: ThemeMode.system,
+  
+  borderRadius: 12.0,
+  defaultPadding: 16.0,
+  cardElevation: 2.0,
+  
+  fontFamily: 'Inter',
 );
 ```
 
-**Dynamic Switching:**
-Change the global theme mode from anywhere using the context extension:
+Toggle theme from anywhere:
+
 ```dart
-onPressed: () => context.themeManager.toggleTheme(),
+IconButton(
+  icon: Icon(Icons.dark_mode),
+  onPressed: () => context.themeManager.toggleTheme(),
+)
 ```
 
 ---
 
-## 🛠 10. Logging & Debugging
+## 🛡️ Error Handling
 
-In `Environment.development`, FKernal provides a rich set of debugging logs:
-- **Network Logs**: Every request, response, and error is logged via Dio with detailed headers and payloads.
-- **Cache Logs**: Notifications whenever a cache hit or miss occurs.
-- **State Logs**: Visual tracking of resource state transitions.
+All errors are normalized to `FKernalError`:
+
+```dart
+const error = FKernalError(
+  type: FKernalErrorType.network,
+  message: 'Connection failed',
+  statusCode: null,
+  originalError: SocketException('...'),
+);
+
+// Error types
+FKernalErrorType.network      // Connection issues
+FKernalErrorType.server       // 5xx responses
+FKernalErrorType.unauthorized // 401
+FKernalErrorType.forbidden    // 403
+FKernalErrorType.notFound     // 404
+FKernalErrorType.validation   // Invalid data
+FKernalErrorType.rateLimited  // 429
+FKernalErrorType.timeout      // Request timeout
+FKernalErrorType.unknown      // Unexpected errors
+```
 
 ---
 
-## 💡 11. Best Practices
+## 🏗️ Models
 
-1.  **Endpoint Centralization**: Keep all `Endpoint` definitions in a single `lib/config/endpoints.dart` file.
-2.  **Type Safety**: Always provide a `parser` to endpoints to take full advantage of Dart's type system in your UI builders.
-3.  **Invalidation**: Use the `invalidates` list to keep your UI consistent without manual state updates. For example, `createUser` should invalidate `getUsers`.
-4.  **Optimistic UI**: Use the `previousData` property in `ResourceLoading` to show old data while the fresh data is being fetched.
+Implement `FKernalModel` for type-safe API handling:
+
+```dart
+class User implements FKernalModel {
+  final int id;
+  final String name;
+  final String email;
+
+  User({required this.id, required this.name, required this.email});
+
+  factory User.fromJson(Map<String, dynamic> json) => User(
+    id: json['id'],
+    name: json['name'],
+    email: json['email'],
+  );
+
+  @override
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'email': email,
+  };
+
+  @override
+  void validate() {
+    if (name.isEmpty) {
+      throw FKernalError(
+        type: FKernalErrorType.validation,
+        message: 'Name is required',
+      );
+    }
+  }
+}
+```
 
 ---
 
-## 📜 License
-Licensed under the [MIT License](LICENSE). Built with ❤️ by the FKernal Team.
+## 🔌 Extensibility
+
+### Custom Network Client
+
+```dart
+class MyNetworkClient implements INetworkClient {
+  @override
+  Future<T> request<T>(Endpoint endpoint, {...}) async {
+    // Your implementation
+  }
+}
+
+await FKernal.init(
+  config: config.copyWith(
+    networkClientOverride: MyNetworkClient(),
+  ),
+  endpoints: endpoints,
+);
+```
+
+### Custom Storage Providers
+
+```dart
+await FKernal.init(
+  config: config.copyWith(
+    cacheProviderOverride: MyCustomCacheProvider(),
+    secureProviderOverride: MySecureStorageProvider(),
+  ),
+  endpoints: endpoints,
+);
+```
+
+### Observers
+
+```dart
+class AnalyticsObserver extends KernelObserver {
+  @override
+  void onEvent(KernelEvent event) {
+    analytics.track(event.name, event.data);
+  }
+}
+
+await FKernal.init(
+  config: config,
+  endpoints: endpoints,
+  observers: [AnalyticsObserver()],
+);
+```
+
+---
+
+## 📋 Best Practices
+
+1. **Centralize Endpoints**: Keep all endpoints in a single `lib/config/endpoints.dart` file.
+
+2. **Use Parsers**: Always provide a `parser` for type-safe data handling.
+
+3. **Leverage Invalidation**: Use `invalidates` to keep UI consistent without manual refreshes.
+
+4. **Use Appropriate Cache TTLs**: Match cache duration to data volatility.
+
+5. **Handle Empty States**: Always provide `emptyWidget` or check for empty data.
+
+6. **Validate Models**: Implement `validate()` for input validation before API calls.
+
+---
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details.
+
+---
+
+Built with ❤️ by the FKernal Team

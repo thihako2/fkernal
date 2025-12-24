@@ -4,12 +4,14 @@ import 'package:provider/provider.dart';
 import '../core/fkernal_app.dart';
 import '../core/fkernal_config.dart';
 import '../error/error_handler.dart';
-import '../networking/api_client.dart';
 import '../networking/endpoint_registry.dart';
 import '../state/state_manager.dart';
 import '../storage/storage_manager.dart';
+import '../state/resource_key.dart';
+import '../state/resource_state.dart';
 import '../state/local_slice.dart';
 import '../theme/theme_manager.dart';
+import '../core/interfaces.dart';
 
 /// Extension methods on BuildContext for accessing FKernal services.
 extension FKernalContextExtensions on BuildContext {
@@ -25,8 +27,42 @@ extension FKernalContextExtensions on BuildContext {
   /// Watches the state manager for changes.
   StateManager watchStateManager() => watch<StateManager>();
 
-  /// Gets the API client.
-  ApiClient get apiClient => read<ApiClient>();
+  /// Watches and returns the state for a resource.
+  ///
+  /// This is the primary reactive API for consuming data in UI.
+  ResourceState<T> useResource<T>(
+    String endpointId, {
+    Map<String, dynamic>? params,
+    Map<String, String>? pathParams,
+  }) {
+    return select<StateManager, ResourceState<T>>(
+      (m) => m.getState<T>(endpointId, params: params, pathParams: pathParams),
+    );
+  }
+
+  /// Watches and returns the state for a resource using a type-safe key.
+  ResourceState<T> useResourceKey<T>(
+    ResourceKey<T> key, {
+    Map<String, dynamic>? params,
+    Map<String, String>? pathParams,
+  }) {
+    return useResource<T>(key.id, params: params, pathParams: pathParams);
+  }
+
+  /// Returns a function to perform an action.
+  ///
+  /// This is the primary API for mutations in UI.
+  Future<T> Function({dynamic payload, Map<String, String>? pathParams})
+      useAction<T>(String endpointId) {
+    return ({payload, pathParams}) => stateManager.performAction<T>(
+          endpointId,
+          payload: payload,
+          pathParams: pathParams,
+        );
+  }
+
+  /// Gets the network client.
+  INetworkClient get networkClient => read<INetworkClient>();
 
   /// Gets the storage manager.
   StorageManager get storageManager => read<StorageManager>();
@@ -56,7 +92,7 @@ extension FKernalContextExtensions on BuildContext {
     );
   }
 
-  /// Performs an action on an endpoint.
+  /// Performs an action (mutation) on an endpoint.
   Future<T> performAction<T>(
     String endpointId, {
     dynamic payload,

@@ -2,6 +2,20 @@
 
 All notable changes to the FKernal package will be documented in this file.
 
+## [1.1.0] - 2025-12-24
+
+### Added
+- **Comprehensive Example**: Consolidated all individual examples into a single, feature-complete `example/main.dart` demonstrating everything from networking to complex local state.
+- **Documentation Overhaul**: Complete rewrite of `README.md` with deep-dives into core concepts, widget references, and best practices.
+- **Type-Safe Resource Access**: Introduced `ResourceKey<T>` for compile-time safety when accessing state.
+- **Observability Layer**: Added `KernelObserver` and `KernelEvent` systems for structured runtime monitoring.
+- **Firebase Support**: Added `FirebaseNetworkClient` for seamless integration with Firebase services.
+- **Decoupled Architecture**: Finalized interfaces for `INetworkClient` and storage providers to allow complete platform customization.
+
+### Changed
+- Standardized all widget naming conventions (e.g., `FKernalBuilder` instead of `FBuilder`).
+- Enhanced `LocalStorage` with history and undo/redo support.
+
 ## [1.0.0] - 2025-12-19
 
 ### Added

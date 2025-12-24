@@ -6,11 +6,33 @@ import '../networking/endpoint.dart';
 import '../networking/endpoint_registry.dart';
 import '../state/state_manager.dart';
 import '../storage/storage_manager.dart';
+import '../storage/default_storage_providers.dart';
+import '../error/fkernal_error.dart';
 import '../error/error_handler.dart';
 import '../state/local_slice.dart';
 import '../theme/theme_manager.dart';
 import 'environment.dart';
 import 'fkernal_config.dart';
+import 'interfaces.dart';
+import 'observability.dart';
+
+/// Status of the FKernal subsystem.
+enum KernelHealthStatus {
+  /// Kernel has not been initialized.
+  uninitialized,
+
+  /// Kernel is initializing.
+  initializing,
+
+  /// Kernel is healthy and ready.
+  healthy,
+
+  /// Kernel had a partial failure during initialization.
+  degraded,
+
+  /// Kernel failed to initialize.
+  failed,
+}
 
 /// Main FKernal framework class.
 ///
@@ -25,8 +47,8 @@ class FKernal {
   /// The endpoint registry.
   final EndpointRegistry endpointRegistry;
 
-  /// The API client for making network requests.
-  final ApiClient apiClient;
+  /// The network client.
+  final INetworkClient networkClient;
 
   /// The central state manager.
   final StateManager stateManager;
@@ -40,14 +62,24 @@ class FKernal {
   /// The theme manager.
   final ThemeManager themeManager;
 
+  /// The kernel observers.
+  final List<KernelObserver> observers;
+
+  /// Current health status of the kernel.
+  KernelHealthStatus _healthStatus = KernelHealthStatus.uninitialized;
+
+  /// Gets the current health status of the kernel.
+  KernelHealthStatus get healthStatus => _healthStatus;
+
   FKernal._({
     required this.config,
     required this.endpointRegistry,
-    required this.apiClient,
+    required this.networkClient,
     required this.stateManager,
     required this.storageManager,
     required this.errorHandler,
     required this.themeManager,
+    this.observers = const [],
   });
 
   /// Gets the current FKernal instance.
@@ -84,6 +116,7 @@ class FKernal {
   static Future<FKernal> init({
     required FKernalConfig config,
     required List<Endpoint> endpoints,
+    List<KernelObserver> observers = const [],
   }) async {
     if (_instance != null) {
       _log(config, 'FKernal already initialized, returning existing instance');
@@ -92,57 +125,88 @@ class FKernal {
 
     _log(config, 'Initializing FKernal...');
 
-    // Initialize error handler first to capture any init errors
-    final errorHandler = ErrorHandler(environment: config.environment);
+    try {
+      config.validate();
+    } catch (e) {
+      _log(config, 'Config validation failed: $e');
+      throw FKernalError.initialization(
+        message: 'Invalid configuration: $e',
+        originalError: e,
+      );
+    }
 
-    // Initialize storage
+    final errorHandler = ErrorHandler(environment: config.environment);
+    bool isDegraded = false;
+
+    // 1. Initialize Storage
     final storageManager = StorageManager(
       enableCache: config.features.enableCache,
       enableOffline: config.features.enableOffline,
+      cacheProvider:
+          config.cacheProviderOverride ?? HiveStorageProvider('fkernal_cache'),
+      dataProvider:
+          config.dataProviderOverride ?? HiveStorageProvider('fkernal_data'),
+      secureProvider:
+          config.secureProviderOverride ?? DefaultSecureStorageProvider(),
     );
-    await storageManager.init();
-    _log(config, 'Storage initialized');
 
-    // Initialize endpoint registry
+    try {
+      await storageManager.init();
+      _log(config, 'Storage initialized');
+    } catch (e) {
+      _log(config, 'Storage initialization failed: $e');
+      isDegraded = true;
+      errorHandler.handle(FKernalError.initialization(
+        message: 'Storage failed to initialize',
+        originalError: e,
+      ));
+    }
+
+    // 2. Initialize Networking
     final endpointRegistry = EndpointRegistry();
     for (final endpoint in endpoints) {
       endpointRegistry.register(endpoint);
     }
-    _log(config, 'Registered ${endpoints.length} endpoints');
 
-    // Initialize API client
-    final apiClient = ApiClient(
-      baseUrl: config.baseUrl,
-      config: config,
-      storageManager: storageManager,
-      errorHandler: errorHandler,
-    );
-    _log(config, 'API client initialized');
+    final INetworkClient networkClient = config.networkClientOverride ??
+        ApiClient(
+          baseUrl: config.baseUrl,
+          config: config,
+          storageManager: storageManager,
+          errorHandler: errorHandler,
+        );
+    _log(config, 'Network client initialized');
 
-    // Initialize state manager with auto-generated slices
+    // 3. Initialize State
     final stateManager = StateManager(
-      apiClient: apiClient,
+      networkClient: networkClient,
       endpointRegistry: endpointRegistry,
       storageManager: storageManager,
       errorHandler: errorHandler,
+      observers: observers,
     );
     _log(config, 'State manager initialized');
 
-    // Initialize theme manager
+    // 4. Initialize Theme
     final themeManager = ThemeManager(config: config.theme);
     _log(config, 'Theme manager initialized');
 
     _instance = FKernal._(
       config: config,
       endpointRegistry: endpointRegistry,
-      apiClient: apiClient,
+      networkClient: networkClient,
       stateManager: stateManager,
       storageManager: storageManager,
       errorHandler: errorHandler,
       themeManager: themeManager,
+      observers: observers,
     );
 
-    _log(config, 'FKernal initialization complete');
+    _instance!._healthStatus =
+        isDegraded ? KernelHealthStatus.degraded : KernelHealthStatus.healthy;
+
+    _log(
+        config, 'FKernal initialization complete: ${_instance!._healthStatus}');
     return _instance!;
   }
 
@@ -242,9 +306,9 @@ class FKernalApp extends StatelessWidget {
 
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider.value(value: fkernal.stateManager),
+        Provider.value(value: fkernal.stateManager),
         ChangeNotifierProvider.value(value: fkernal.themeManager),
-        Provider.value(value: fkernal.apiClient),
+        Provider.value(value: fkernal.networkClient),
         Provider.value(value: fkernal.errorHandler),
         Provider.value(value: fkernal.storageManager),
         Provider.value(value: fkernal.endpointRegistry),

@@ -32,22 +32,27 @@ export 'src/core/fkernal_app.dart';
 export 'src/core/fkernal_config.dart';
 export 'src/core/environment.dart';
 export 'src/core/models/fkernal_model.dart';
+export 'src/core/interfaces.dart';
+export 'src/core/observability.dart';
 
 // Networking
 export 'src/networking/endpoint.dart';
 export 'src/networking/http_method.dart';
 export 'src/networking/api_client.dart';
 export 'src/networking/endpoint_registry.dart';
+export 'src/networking/firebase_network_client.dart';
 
 // State
 export 'src/state/resource_state.dart';
 export 'src/state/state_manager.dart';
 export 'src/state/fkernal_provider.dart';
 export 'src/state/local_slice.dart';
+export 'src/state/resource_key.dart';
 
 // Storage
 export 'src/storage/cache_config.dart';
 export 'src/storage/storage_manager.dart';
+export 'src/storage/default_storage_providers.dart';
 
 // Error
 export 'src/error/fkernal_error.dart';

@@ -1,71 +1,62 @@
 import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
-import 'package:hive_flutter/hive_flutter.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../core/interfaces.dart';
 
-/// Manages local storage, caching, and secure storage.
-///
-/// Provides a unified interface for:
-/// - Response caching with TTL
-/// - Secure token storage
-/// - Offline data persistence
+/// Manages local storage, caching, and secure storage via swappable providers.
 class StorageManager {
   final bool enableCache;
   final bool enableOffline;
 
-  Box<dynamic>? _cacheBox;
-  Box<dynamic>? _dataBox;
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final IStorageProvider? cacheProvider;
+  final IStorageProvider? dataProvider;
+  final ISecureStorageProvider secureProvider;
 
-  static const _cacheBoxName = 'fkernal_cache';
-  static const _dataBoxName = 'fkernal_data';
   static const _cacheMetaKey = '_cache_meta';
 
-  StorageManager({this.enableCache = true, this.enableOffline = false});
+  StorageManager({
+    this.enableCache = true,
+    this.enableOffline = false,
+    this.cacheProvider,
+    this.dataProvider,
+    required this.secureProvider,
+  });
 
-  /// Initializes the storage system.
+  /// Initializes the storage providers.
   Future<void> init() async {
-    await Hive.initFlutter();
-
-    if (enableCache) {
-      _cacheBox = await Hive.openBox(_cacheBoxName);
+    if (enableCache && cacheProvider != null) {
+      await cacheProvider!.init();
     }
-
-    if (enableOffline) {
-      _dataBox = await Hive.openBox(_dataBoxName);
+    if (enableOffline && dataProvider != null) {
+      await dataProvider!.init();
     }
   }
 
   // ============ Cache Methods ============
 
-  /// Gets a cached value.
   Future<dynamic> getCache(String key) async {
-    if (!enableCache || _cacheBox == null) return null;
+    if (!enableCache || cacheProvider == null) return null;
 
-    final meta = _getCacheMeta(key);
+    final meta = await _getCacheMeta(key);
     if (meta == null) return null;
 
-    // Check expiration
     if (DateTime.now().isAfter(meta.expiresAt)) {
-      await _cacheBox!.delete(key);
-      await _cacheBox!.delete('$_cacheMetaKey:$key');
+      await cacheProvider!.delete(key);
+      await cacheProvider!.delete('$_cacheMetaKey:$key');
       return null;
     }
 
-    return _cacheBox!.get(key);
+    return cacheProvider!.get(key);
   }
 
-  /// Sets a cached value with optional duration.
   Future<void> setCache(
     String key,
     dynamic value, {
     Duration duration = const Duration(minutes: 5),
   }) async {
-    if (!enableCache || _cacheBox == null) return;
+    if (!enableCache || cacheProvider == null) return;
 
-    await _cacheBox!.put(key, value);
-    await _cacheBox!.put(
+    await cacheProvider!.put(key, value);
+    await cacheProvider!.put(
       '$_cacheMetaKey:$key',
       jsonEncode({
         'expiresAt': DateTime.now().add(duration).toIso8601String(),
@@ -74,29 +65,25 @@ class StorageManager {
     );
   }
 
-  /// Invalidates cache entries that match the given pattern.
   Future<void> invalidateCache(String pattern) async {
-    if (!enableCache || _cacheBox == null) return;
+    if (!enableCache || cacheProvider == null) return;
 
-    final keysToDelete = _cacheBox!.keys
+    final keysToDelete = cacheProvider!.keys
         .where((key) => key.toString().contains(pattern))
         .toList();
 
     for (final key in keysToDelete) {
-      await _cacheBox!.delete(key);
-      await _cacheBox!.delete('$_cacheMetaKey:$key');
+      await cacheProvider!.delete(key.toString());
+      await cacheProvider!.delete('$_cacheMetaKey:${key.toString()}');
     }
   }
 
-  /// Clears all cached data.
   Future<void> clearCache() async {
-    if (_cacheBox != null) {
-      await _cacheBox!.clear();
-    }
+    await cacheProvider?.clear();
   }
 
-  _CacheMeta? _getCacheMeta(String key) {
-    final metaJson = _cacheBox?.get('$_cacheMetaKey:$key');
+  Future<_CacheMeta?> _getCacheMeta(String key) async {
+    final metaJson = await cacheProvider?.get('$_cacheMetaKey:$key');
     if (metaJson == null) return null;
 
     try {
@@ -113,83 +100,38 @@ class StorageManager {
 
   // ============ Secure Storage Methods ============
 
-  /// Gets a secure value.
-  Future<String?> getSecure(String key) async {
-    try {
-      return await _secureStorage.read(key: key);
-    } catch (e) {
-      debugPrint('[FKernal Storage] Error reading secure storage: $e');
-      return null;
-    }
-  }
-
-  /// Sets a secure value.
-  Future<void> setSecure(String key, String value) async {
-    try {
-      await _secureStorage.write(key: key, value: value);
-    } catch (e) {
-      debugPrint('[FKernal Storage] Error writing secure storage: $e');
-    }
-  }
-
-  /// Deletes a secure value.
-  Future<void> deleteSecure(String key) async {
-    try {
-      await _secureStorage.delete(key: key);
-    } catch (e) {
-      debugPrint('[FKernal Storage] Error deleting secure storage: $e');
-    }
-  }
-
-  /// Clears all secure storage.
-  Future<void> clearSecure() async {
-    try {
-      await _secureStorage.deleteAll();
-    } catch (e) {
-      debugPrint('[FKernal Storage] Error clearing secure storage: $e');
-    }
-  }
+  Future<String?> getSecure(String key) => secureProvider.read(key);
+  Future<void> setSecure(String key, String value) =>
+      secureProvider.write(key, value);
+  Future<void> deleteSecure(String key) => secureProvider.delete(key);
+  Future<void> clearSecure() => secureProvider.deleteAll();
 
   // ============ Persistent Data Methods ============
 
-  /// Gets a persisted value.
   Future<dynamic> getData(String key) async {
-    if (!enableOffline || _dataBox == null) return null;
-    return _dataBox!.get(key);
+    if (!enableOffline || dataProvider == null) return null;
+    return dataProvider!.get(key);
   }
 
-  /// Sets a persisted value.
   Future<void> setData(String key, dynamic value) async {
-    if (!enableOffline || _dataBox == null) return;
-    await _dataBox!.put(key, value);
+    if (!enableOffline || dataProvider == null) return;
+    await dataProvider!.put(key, value);
   }
 
-  /// Deletes a persisted value.
-  Future<void> deleteData(String key) async {
-    if (_dataBox != null) {
-      await _dataBox!.delete(key);
-    }
-  }
-
-  /// Clears all persisted data.
-  Future<void> clearData() async {
-    if (_dataBox != null) {
-      await _dataBox!.clear();
-    }
-  }
+  Future<void> deleteData(String key) =>
+      dataProvider?.delete(key) ?? Future.value();
+  Future<void> clearData() => dataProvider?.clear() ?? Future.value();
 
   // ============ Lifecycle ============
 
-  /// Disposes all storage resources.
   Future<void> dispose() async {
-    await _cacheBox?.close();
-    await _dataBox?.close();
+    await cacheProvider?.close();
+    await dataProvider?.close();
   }
 }
 
 class _CacheMeta {
   final DateTime expiresAt;
   final DateTime createdAt;
-
   _CacheMeta({required this.expiresAt, required this.createdAt});
 }

@@ -1,63 +1,70 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 
+import '../core/interfaces.dart';
+import '../core/observability.dart';
 import '../error/error_handler.dart';
 import '../error/fkernal_error.dart';
-import '../networking/api_client.dart';
 import '../networking/endpoint.dart';
 import '../networking/endpoint_registry.dart';
 import '../storage/storage_manager.dart';
 import 'resource_state.dart';
 
 /// Central state manager for the application.
-///
-/// Automatically manages state slices for each endpoint and handles:
-/// - Data fetching and caching
-/// - Loading states
-/// - Error states
-/// - Cache invalidation on mutations
-///
-/// UI code uses [FKernalBuilder] or [StateManager] methods to interact with state.
 class StateManager extends ChangeNotifier {
-  final ApiClient apiClient;
+  final INetworkClient networkClient;
   final EndpointRegistry endpointRegistry;
   final StorageManager storageManager;
   final ErrorHandler errorHandler;
+  final List<KernelObserver> observers;
 
   /// State slices for each endpoint, keyed by endpoint ID + params hash.
-  final Map<String, ResourceState<dynamic>> _states = {};
+  final Map<String, ValueNotifier<ResourceState<dynamic>>> _states = {};
 
   /// In-flight requests to prevent duplicate fetches.
   final Map<String, Future<void>> _pendingRequests = {};
 
+  /// Active stream subscriptions for watch() calls.
+  final Map<String, StreamSubscription> _subscriptions = {};
+
   StateManager({
-    required this.apiClient,
+    required this.networkClient,
     required this.endpointRegistry,
     required this.storageManager,
     required this.errorHandler,
+    this.observers = const [],
   });
 
+  void _notifyObservers(KernelEvent event) {
+    for (final observer in observers) {
+      observer.onEvent(event);
+    }
+  }
+
+  /// Gets the notification handle for a specific resource state.
+  ValueListenable<ResourceState<T>> getListenable<T>(
+    String endpointId, {
+    Map<String, dynamic>? params,
+    Map<String, String>? pathParams,
+  }) {
+    final key = _buildStateKey(endpointId, params, pathParams);
+    if (!_states.containsKey(key)) {
+      _states[key] = ValueNotifier<ResourceState<T>>(ResourceInitial<T>());
+    }
+    return _states[key]! as ValueListenable<ResourceState<T>>;
+  }
+
   /// Gets the current state for an endpoint.
-  ///
-  /// Returns [ResourceInitial] if no fetch has been attempted.
   ResourceState<T> getState<T>(
     String endpointId, {
     Map<String, dynamic>? params,
     Map<String, String>? pathParams,
   }) {
     final key = _buildStateKey(endpointId, params, pathParams);
-    return (_states[key] as ResourceState<T>?) ?? ResourceInitial<T>();
+    return (_states[key]?.value as ResourceState<T>?) ?? ResourceInitial<T>();
   }
 
   /// Fetches data from an endpoint.
-  ///
-  /// This method:
-  /// 1. Sets state to loading
-  /// 2. Checks cache (if enabled)
-  /// 3. Makes network request
-  /// 4. Updates state with data or error
-  /// 5. Notifies listeners
-  ///
-  /// Returns the fetched data, or throws on error.
   Future<T> fetch<T>(
     String endpointId, {
     Map<String, dynamic>? params,
@@ -70,7 +77,7 @@ class StateManager extends ChangeNotifier {
     // Deduplicate in-flight requests
     if (_pendingRequests.containsKey(key)) {
       await _pendingRequests[key];
-      final state = _states[key];
+      final state = _states[key]!.value;
       if (state is ResourceData<T>) {
         return state.data;
       } else if (state is ResourceError<T>) {
@@ -79,11 +86,27 @@ class StateManager extends ChangeNotifier {
     }
 
     // Get previous data for optimistic updates
-    final previousData = _states[key]?.dataOrNull as T?;
+    final previousState = _states[key];
+    final previousData = previousState?.value.dataOrNull as T?;
 
-    // Set loading state
-    _states[key] = ResourceLoading<T>(previousData: previousData);
+    if (previousState == null) {
+      _states[key] = ValueNotifier<ResourceState<T>>(
+          ResourceLoading<T>(previousData: previousData));
+    } else {
+      previousState.value = ResourceLoading<T>(previousData: previousData);
+    }
     notifyListeners();
+
+    _notifyObservers(KernelEvent(
+      type: KernelEventType.requestStarted,
+      resourceId: endpointId,
+      message: 'Fetching resource...',
+      data: {
+        'params': params,
+        'pathParams': pathParams,
+        'forceRefresh': forceRefresh
+      },
+    ));
 
     // Create the fetch future
     final fetchFuture = _doFetch<T>(
@@ -98,7 +121,7 @@ class StateManager extends ChangeNotifier {
 
     try {
       await fetchFuture;
-      final state = _states[key];
+      final state = _states[key]!.value;
       if (state is ResourceData<T>) {
         return state.data;
       } else if (state is ResourceError<T>) {
@@ -118,14 +141,19 @@ class StateManager extends ChangeNotifier {
     bool forceRefresh = false,
   }) async {
     try {
-      final data = await apiClient.request<T>(
+      final data = await networkClient.request<T>(
         endpoint,
         queryParams: params,
         pathParams: pathParams,
       );
 
-      _states[key] = ResourceData<T>(data: data);
-      notifyListeners();
+      _states[key]!.value = ResourceData<T>(data: data);
+
+      _notifyObservers(KernelEvent(
+        type: KernelEventType.requestCompleted,
+        resourceId: endpoint.id,
+        message: 'Resource fetched successfully',
+      ));
     } catch (e) {
       final error = e is FKernalError
           ? e
@@ -133,16 +161,68 @@ class StateManager extends ChangeNotifier {
 
       errorHandler.handle(error);
 
-      final previousData = (_states[key] as ResourceLoading<T>?)?.previousData;
-      _states[key] = ResourceError<T>(error: error, previousData: previousData);
+      final previousData =
+          (_states[key]!.value as ResourceLoading<T>?)?.previousData;
+      _states[key]!.value =
+          ResourceError<T>(error: error, previousData: previousData);
       notifyListeners();
+
+      _notifyObservers(KernelEvent(
+        type: KernelEventType.requestError,
+        resourceId: endpoint.id,
+        message: 'Failed to fetch resource: ${error.message}',
+        data: error,
+      ));
     }
   }
 
+  /// Watches an endpoint for real-time updates.
+  void watch<T>(
+    String endpointId, {
+    Map<String, dynamic>? params,
+    Map<String, String>? pathParams,
+  }) {
+    final key = _buildStateKey(endpointId, params, pathParams);
+    if (_subscriptions.containsKey(key)) return;
+
+    final endpoint = endpointRegistry.get(endpointId);
+
+    if (!_states.containsKey(key) || _states[key]!.value is ResourceInitial) {
+      _states[key] = ValueNotifier<ResourceState<T>>(const ResourceLoading());
+    }
+
+    final subscription = networkClient
+        .watch<T>(
+      endpoint,
+      queryParams: params,
+      pathParams: pathParams,
+    )
+        .listen(
+      (data) {
+        if (!_states.containsKey(key)) {
+          _states[key] =
+              ValueNotifier<ResourceState<T>>(ResourceData<T>(data: data));
+        } else {
+          _states[key]!.value = ResourceData<T>(data: data);
+        }
+        notifyListeners();
+      },
+      onError: (e) {
+        final error = e is FKernalError
+            ? e
+            : FKernalError.unknown(message: e.toString(), originalError: e);
+
+        if (_states.containsKey(key)) {
+          _states[key]!.value = ResourceError<T>(error: error);
+        }
+        notifyListeners();
+      },
+    );
+
+    _subscriptions[key] = subscription;
+  }
+
   /// Performs an action (mutation) on an endpoint.
-  ///
-  /// Actions are typically POST, PUT, PATCH, or DELETE requests.
-  /// After a successful action, related caches are invalidated.
   Future<T> performAction<T>(
     String endpointId, {
     dynamic payload,
@@ -151,20 +231,35 @@ class StateManager extends ChangeNotifier {
     final endpoint = endpointRegistry.get(endpointId);
     final key = _buildStateKey(endpointId, null, pathParams);
 
-    // Set loading state
-    final previousData = _states[key]?.dataOrNull as T?;
-    _states[key] = ResourceLoading<T>(previousData: previousData);
+    if (!_states.containsKey(key)) {
+      _states[key] = ValueNotifier<ResourceState<T>>(const ResourceInitial());
+    }
+
+    final previousData = _states[key]!.value.dataOrNull as T?;
+    _states[key]!.value = ResourceLoading<T>(previousData: previousData);
     notifyListeners();
 
+    _notifyObservers(KernelEvent(
+      type: KernelEventType.actionStarted,
+      resourceId: endpointId,
+      message: 'Performing action...',
+      data: payload,
+    ));
+
     try {
-      final data = await apiClient.request<T>(
+      final data = await networkClient.request<T>(
         endpoint,
         pathParams: pathParams,
         body: payload,
       );
 
-      _states[key] = ResourceData<T>(data: data);
-      notifyListeners();
+      _states[key]!.value = ResourceData<T>(data: data);
+
+      _notifyObservers(KernelEvent(
+        type: KernelEventType.actionCompleted,
+        resourceId: endpointId,
+        message: 'Action completed successfully',
+      ));
 
       // Invalidate related caches
       if (endpoint.invalidates.isNotEmpty) {
@@ -179,8 +274,15 @@ class StateManager extends ChangeNotifier {
 
       errorHandler.handle(error);
 
-      _states[key] = ResourceError<T>(error: error, previousData: previousData);
-      notifyListeners();
+      _states[key]!.value =
+          ResourceError<T>(error: error, previousData: previousData);
+
+      _notifyObservers(KernelEvent(
+        type: KernelEventType.requestError,
+        resourceId: endpointId,
+        message: 'Action failed: ${error.message}',
+        data: error,
+      ));
 
       throw error;
     }
@@ -189,18 +291,16 @@ class StateManager extends ChangeNotifier {
   /// Invalidates state for the given endpoint IDs.
   Future<void> _invalidateEndpoints(List<String> endpointIds) async {
     for (final id in endpointIds) {
-      // Clear all states that start with this endpoint ID
-      final keysToRemove = _states.keys
-          .where((key) => key.startsWith('$id:'))
-          .toList();
+      final keysToRemove =
+          _states.keys.where((key) => key.startsWith('$id:')).toList();
       for (final key in keysToRemove) {
-        _states[key] = const ResourceInitial();
+        _states[key]!.value = const ResourceInitial();
       }
+      notifyListeners();
 
-      // Clear cache
-      await apiClient.invalidateCache([id]);
+      // Invalidate in storage as well
+      await storageManager.invalidateCache(id);
     }
-    notifyListeners();
   }
 
   /// Refreshes data for an endpoint.
@@ -217,23 +317,6 @@ class StateManager extends ChangeNotifier {
     );
   }
 
-  /// Clears all state.
-  void clear() {
-    _states.clear();
-    notifyListeners();
-  }
-
-  /// Clears state for a specific endpoint.
-  void clearEndpoint(String endpointId) {
-    final keysToRemove = _states.keys
-        .where((key) => key.startsWith('$endpointId:'))
-        .toList();
-    for (final key in keysToRemove) {
-      _states.remove(key);
-    }
-    notifyListeners();
-  }
-
   String _buildStateKey(
     String endpointId,
     Map<String, dynamic>? params,
@@ -244,5 +327,17 @@ class StateManager extends ChangeNotifier {
     final pathHash =
         pathParams?.entries.map((e) => '${e.key}=${e.value}').join('&') ?? '';
     return '$endpointId:$paramHash:$pathHash';
+  }
+
+  @override
+  void dispose() {
+    for (final sub in _subscriptions.values) {
+      sub.cancel();
+    }
+    _subscriptions.clear();
+    for (final state in _states.values) {
+      state.dispose();
+    }
+    super.dispose();
   }
 }

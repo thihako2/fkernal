@@ -36,6 +36,9 @@ enum FKernalErrorType {
   /// Storage error.
   storage,
 
+  /// Error during initialization.
+  initialization,
+
   /// Unknown error.
   unknown,
 }
@@ -211,6 +214,18 @@ class FKernalError implements Exception {
   }) {
     return FKernalError(
       type: FKernalErrorType.storage,
+      message: message,
+      originalError: originalError,
+    );
+  }
+
+  /// Creates an initialization error.
+  factory FKernalError.initialization({
+    required String message,
+    Object? originalError,
+  }) {
+    return FKernalError(
+      type: FKernalErrorType.initialization,
       message: message,
       originalError: originalError,
     );

@@ -7,70 +7,21 @@ import 'auto_loading_widget.dart';
 import 'auto_error_widget.dart';
 
 /// Builder widget for consuming resource state from endpoints.
-///
-/// Automatically handles loading, data, and error states:
-///
-/// ```dart
-/// FKernalBuilder<List<User>>(
-///   resource: 'getUsers',
-///   builder: (context, data) => UserList(users: data),
-/// )
-/// ```
-///
-/// For more control, use [builder] instead of [onData]:
-///
-/// ```dart
-/// FKernalBuilder<List<User>>(
-///   resource: 'getUsers',
-///   customBuilder: (context, state) => switch (state) {
-///     ResourceLoading() => MyLoadingWidget(),
-///     ResourceData(:final data) => UserList(users: data),
-///     ResourceError(:final error) => MyErrorWidget(error),
-///     ResourceInitial() => SizedBox(),
-///   },
-/// )
-/// ```
 class FKernalBuilder<T> extends StatefulWidget {
-  /// The endpoint ID to fetch data from.
   final String resource;
-
-  /// Query parameters for the request.
   final Map<String, dynamic>? params;
-
-  /// Path parameters for the request.
   final Map<String, String>? pathParams;
-
-  /// Whether to automatically fetch data on mount.
   final bool autoFetch;
-
-  /// Builder for the data state.
-  ///
-  /// If provided, loading and error states are handled automatically.
   final Widget Function(BuildContext context, T data)? builder;
-
-  /// Custom builder for full control over all states.
   final Widget Function(BuildContext context, ResourceState<T> state)?
-  customBuilder;
-
-  /// Custom loading widget.
+      customBuilder;
   final Widget? loadingWidget;
-
-  /// Custom error widget builder.
   final Widget Function(
-    BuildContext context,
-    dynamic error,
-    VoidCallback retry,
-  )?
-  errorBuilder;
-
-  /// Widget to show when there's no data.
+      BuildContext context, dynamic error, VoidCallback retry)? errorBuilder;
   final Widget? emptyWidget;
-
-  /// Callback when data is successfully loaded.
   final void Function(T data)? onData;
-
-  /// Callback when an error occurs.
   final void Function(dynamic error)? onError;
+  final bool watch;
 
   const FKernalBuilder({
     super.key,
@@ -85,20 +36,23 @@ class FKernalBuilder<T> extends StatefulWidget {
     this.emptyWidget,
     this.onData,
     this.onError,
-  }) : assert(
-         builder != null || customBuilder != null,
-         'Either builder or customBuilder must be provided',
-       );
+    this.watch = false,
+  }) : assert(builder != null || customBuilder != null);
 
   @override
   State<FKernalBuilder<T>> createState() => _FKernalBuilderState<T>();
 }
 
 class _FKernalBuilderState<T> extends State<FKernalBuilder<T>> {
+  late StateManager _stateManager;
+
   @override
-  void initState() {
-    super.initState();
-    if (widget.autoFetch) {
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _stateManager = context.read<StateManager>();
+    if (widget.watch) {
+      _watch();
+    } else if (widget.autoFetch) {
       _fetch();
     }
   }
@@ -106,19 +60,33 @@ class _FKernalBuilderState<T> extends State<FKernalBuilder<T>> {
   @override
   void didUpdateWidget(FKernalBuilder<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Refetch if resource or params changed
     if (widget.resource != oldWidget.resource ||
         widget.params != oldWidget.params ||
-        widget.pathParams != oldWidget.pathParams) {
-      _fetch();
+        widget.pathParams != oldWidget.pathParams ||
+        widget.watch != oldWidget.watch) {
+      if (widget.watch) {
+        _watch();
+      } else {
+        _fetch();
+      }
     }
+  }
+
+  void _watch() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _stateManager.watch<T>(
+        widget.resource,
+        params: widget.params,
+        pathParams: widget.pathParams,
+      );
+    });
   }
 
   void _fetch() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final stateManager = context.read<StateManager>();
-      stateManager.fetch<T>(
+      _stateManager.fetch<T>(
         widget.resource,
         params: widget.params,
         pathParams: widget.pathParams,
@@ -127,8 +95,7 @@ class _FKernalBuilderState<T> extends State<FKernalBuilder<T>> {
   }
 
   void _retry() {
-    final stateManager = context.read<StateManager>();
-    stateManager.refresh<T>(
+    _stateManager.refresh<T>(
       widget.resource,
       params: widget.params,
       pathParams: widget.pathParams,
@@ -137,39 +104,39 @@ class _FKernalBuilderState<T> extends State<FKernalBuilder<T>> {
 
   @override
   Widget build(BuildContext context) {
-    final stateManager = context.watch<StateManager>();
-    final state = stateManager.getState<T>(
-      widget.resource,
-      params: widget.params,
-      pathParams: widget.pathParams,
+    // Listen to the specific resource instead of the whole StateManager
+    return ValueListenableBuilder<ResourceState<T>>(
+      valueListenable: _stateManager.getListenable<T>(
+        widget.resource,
+        params: widget.params,
+        pathParams: widget.pathParams,
+      ),
+      builder: (context, state, child) {
+        // Call callbacks
+        if (state is ResourceData<T> && widget.onData != null) {
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => widget.onData!(state.data));
+        }
+        if (state is ResourceError<T> && widget.onError != null) {
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => widget.onError!(state.error));
+        }
+
+        if (widget.customBuilder != null) {
+          return widget.customBuilder!(context, state);
+        }
+
+        return switch (state) {
+          ResourceLoading() =>
+            widget.loadingWidget ?? const AutoLoadingWidget(),
+          ResourceData(:final data) => widget.builder!(context, data),
+          ResourceError(:final error) => widget.errorBuilder != null
+              ? widget.errorBuilder!(context, error, _retry)
+              : AutoErrorWidget(error: error, onRetry: _retry),
+          ResourceInitial() =>
+            widget.loadingWidget ?? const AutoLoadingWidget(),
+        };
+      },
     );
-
-    // Call callbacks
-    if (state is ResourceData<T> && widget.onData != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        widget.onData!(state.data);
-      });
-    }
-    if (state is ResourceError<T> && widget.onError != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        widget.onError!(state.error);
-      });
-    }
-
-    // Use custom builder if provided
-    if (widget.customBuilder != null) {
-      return widget.customBuilder!(context, state);
-    }
-
-    // Default state handling
-    return switch (state) {
-      ResourceLoading() => widget.loadingWidget ?? const AutoLoadingWidget(),
-      ResourceData(:final data) => widget.builder!(context, data),
-      ResourceError(:final error) =>
-        widget.errorBuilder != null
-            ? widget.errorBuilder!(context, error, _retry)
-            : AutoErrorWidget(error: error, onRetry: _retry),
-      ResourceInitial() => widget.loadingWidget ?? const AutoLoadingWidget(),
-    };
   }
 }
