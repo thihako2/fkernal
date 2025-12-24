@@ -285,6 +285,50 @@ class FKernal {
       pathParams: pathParams,
     );
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Runtime Authentication (Optional)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Optional: Updates the auth token at runtime.
+  ///
+  /// Use this after login to inject the new token:
+  /// ```dart
+  /// await authService.login(email, password);
+  /// FKernal.instance.updateAuthToken(accessToken);
+  /// ```
+  void updateAuthToken(String token) {
+    if (networkClient is ApiClient) {
+      (networkClient as ApiClient).updateToken(token);
+    }
+    _log(config, 'Auth token updated');
+  }
+
+  /// Optional: Clears the auth token at runtime.
+  ///
+  /// Use this on logout to remove the token:
+  /// ```dart
+  /// await authService.logout();
+  /// FKernal.instance.clearAuthToken();
+  /// ```
+  void clearAuthToken() {
+    if (networkClient is ApiClient) {
+      (networkClient as ApiClient).updateToken(null);
+    }
+    _log(config, 'Auth token cleared');
+  }
+
+  /// Cancels all in-flight requests for a specific endpoint.
+  void cancelEndpoint(String endpointId) {
+    if (networkClient is ApiClient) {
+      (networkClient as ApiClient).cancelEndpoint(endpointId);
+    }
+  }
+
+  /// Cancels all in-flight requests.
+  void cancelAllRequests() {
+    networkClient.cancelAll();
+  }
 }
 
 /// Wrapper widget that provides FKernal services to the widget tree.

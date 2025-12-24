@@ -78,6 +78,38 @@ class StorageManager {
     }
   }
 
+  /// Clears all cache entries for a specific endpoint (all parameter variants).
+  ///
+  /// ```dart
+  /// // Clears cache for getUsers, getUsers?page=1, getUsers?search=foo, etc.
+  /// await storageManager.clearEndpointCache('/users');
+  /// ```
+  Future<void> clearEndpointCache(String endpointPath) async {
+    await invalidateCache(endpointPath);
+  }
+
+  /// Clears cache entries matching a wildcard pattern.
+  ///
+  /// ```dart
+  /// // Clear all user-related cache
+  /// await storageManager.invalidateCachePattern('/users*');
+  /// ```
+  Future<void> invalidateCachePattern(String pattern) async {
+    if (!enableCache || cacheProvider == null) return;
+
+    final regexPattern = pattern.replaceAll('*', '.*').replaceAll('?', '.?');
+    final regex = RegExp(regexPattern);
+
+    final keysToDelete = cacheProvider!.keys
+        .where((key) => regex.hasMatch(key.toString()))
+        .toList();
+
+    for (final key in keysToDelete) {
+      await cacheProvider!.delete(key.toString());
+      await cacheProvider!.delete('$_cacheMetaKey:${key.toString()}');
+    }
+  }
+
   Future<void> clearCache() async {
     await cacheProvider?.clear();
   }

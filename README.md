@@ -48,8 +48,12 @@ FKernal eliminates boilerplate by providing a centralized orchestration layer fo
 | 📦 **Local State Slices** | Manage UI state with Value, Toggle, Counter, List, and Map slices. Includes undo/redo support with history tracking. |
 | 🔌 **Extensible Architecture** | Override network client, storage providers, and add observers. Implement `INetworkClient`, `IStorageProvider`, or `ISecureStorageProvider` for full customization. |
 | 🔍 **Observability** | Built-in `KernelObserver` and `KernelEvent` systems for structured runtime monitoring, debugging, and analytics integration. |
-| 🔥 **Firebase Ready** | Built-in `FirebaseNetworkClient` for seamless Firebase/Firestore integration. |
+| 🔥 **Optional Firebase** | Separated Firebase module for Firestore/Auth/Storage. Keeps core package light while providing deep integration when needed. |
 | 🔐 **Type-Safe Resources** | Use `ResourceKey<T>` for compile-time type safety when accessing state. Catch typos at build time. |
+| 🔄 **Token Refresh & Auth** | Opt-in 401 token refresh, dynamic token providers, and runtime auth controls. |
+| 📑 **Pagination Support** | Built-in `FKernalPaginatedBuilder` for effortless infinite scrolling and list management. |
+| 🧪 **First-Class Testing** | Comprehensive mocks for networking and storage included. |
+| 🚀 **High Performance** | Automatic request deduplication and per-widget cancellation to save bandwidth and battery. |
 
 ---
 
@@ -57,9 +61,8 @@ FKernal eliminates boilerplate by providing a centralized orchestration layer fo
 
 Add FKernal to your `pubspec.yaml`:
 
-```yaml
 dependencies:
-  fkernal: ^1.1.0
+  fkernal: ^1.2.0
 ```
 
 Then run:
@@ -83,11 +86,17 @@ dependencies:
   flutter_secure_storage: ^9.0.0
 ```
 
-For Firebase/Firestore integration:
+For Firebase/Firestore integration, use the optional module:
+```dart
+import 'package:fkernal/fkernal_firebase.dart';
+```
+
+Then add these to your `pubspec.yaml`:
 ```yaml
 dependencies:
-  cloud_firestore: ^4.0.0
-  firebase_core: ^2.0.0
+  cloud_firestore: ^5.0.0
+  firebase_auth: ^5.0.0
+  firebase_storage: ^12.0.0
 ```
 
 ---
@@ -449,6 +458,8 @@ FKernalErrorType.validation   // Invalid data
 FKernalErrorType.rateLimited  // 429
 FKernalErrorType.timeout      // Request timeout
 FKernalErrorType.unknown      // Unexpected errors
+FKernalErrorType.cancelled    // Request manually cancelled
+```
 ```
 
 ---
@@ -611,15 +622,36 @@ Yes! FKernal can be adopted incrementally. Initialize alongside your existing se
 Yes, by implementing `INetworkClient` to translate endpoints to GraphQL queries.
 
 ### How do I handle authentication?
+
+FKernal supports three ways to handle auth:
+
+1. **Static Token**:
 ```dart
-// Update token after login
+AuthConfig.bearer('token', onTokenRefresh: () => auth.refresh())
+```
+
+2. **Dynamic Provider** (Recommended for Secure Storage):
+```dart
+AuthConfig.dynamic(
+  tokenProvider: () => secureStorage.read('access_token'),
+  onTokenExpired: () => handleLogout(),
+)
+```
+
+3. **Runtime Updates**:
+```dart
 FKernal.instance.updateAuthToken(newToken);
-// Clear token on logout
-FKernal.instance.updateAuthToken(null);
+FKernal.instance.clearAuthToken();
+```
+
+### Does it support request cancellation?
+Yes! Every widget can cancel its own requests, or you can do it manually:
+```dart
+FKernal.instance.cancelEndpoint('getUsers');
 ```
 
 ### Is FKernal production-ready?
-Yes! FKernal includes comprehensive error handling, automatic retry with exponential backoff, memory-efficient state management, and built-in observability for monitoring.
+Yes! FKernal includes comprehensive error handling, automatic retry with exponential backoff, memory-efficient state management, automatic request deduplication, and built-in observability.
 
 ---
 

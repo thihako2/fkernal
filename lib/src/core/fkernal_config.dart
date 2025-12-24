@@ -31,6 +31,11 @@ class FeatureFlags {
 }
 
 /// Authentication configuration.
+///
+/// All authentication features are opt-in. Use the configuration that fits your needs:
+/// - [AuthConfig.bearer] for static bearer token
+/// - [AuthConfig.apiKey] for API key authentication
+/// - Custom [tokenProvider] for dynamic tokens (e.g., from secure storage)
 class AuthConfig {
   /// The authentication token (if using token-based auth).
   final String? token;
@@ -44,8 +49,23 @@ class AuthConfig {
   /// Header name for the API key.
   final String apiKeyHeader;
 
-  /// Token refresh callback.
+  /// Optional: Token refresh callback.
+  ///
+  /// If provided, this will be called when a 401 response is received,
+  /// and the request will be retried with the new token.
   final Future<String?> Function()? onTokenRefresh;
+
+  /// Optional: Dynamic token provider.
+  ///
+  /// If provided, this will be called before each request to get the current token.
+  /// Useful for tokens stored in secure storage that may change.
+  final Future<String?> Function()? tokenProvider;
+
+  /// Optional: Callback when token expires (receives 401).
+  ///
+  /// Called when a 401 is received and no [onTokenRefresh] is provided,
+  /// allowing the app to handle logout/redirect.
+  final void Function()? onTokenExpired;
 
   const AuthConfig({
     this.token,
@@ -53,13 +73,20 @@ class AuthConfig {
     this.apiKey,
     this.apiKeyHeader = 'X-API-Key',
     this.onTokenRefresh,
+    this.tokenProvider,
+    this.onTokenExpired,
   });
 
   /// Creates auth config with bearer token.
-  factory AuthConfig.bearer(String token, {Map<String, String>? extraHeaders}) {
+  factory AuthConfig.bearer(
+    String token, {
+    Map<String, String>? extraHeaders,
+    Future<String?> Function()? onTokenRefresh,
+  }) {
     return AuthConfig(
       token: token,
       headers: {'Authorization': 'Bearer $token', ...?extraHeaders},
+      onTokenRefresh: onTokenRefresh,
     );
   }
 
@@ -69,6 +96,47 @@ class AuthConfig {
       apiKey: key,
       apiKeyHeader: header,
       headers: {header: key},
+    );
+  }
+
+  /// Creates auth config with dynamic token provider.
+  ///
+  /// Useful when tokens are stored in secure storage and may change:
+  /// ```dart
+  /// AuthConfig.dynamic(
+  ///   tokenProvider: () => secureStorage.read('access_token'),
+  ///   onTokenRefresh: () => authService.refreshToken(),
+  ///   onTokenExpired: () => router.go('/login'),
+  /// )
+  /// ```
+  factory AuthConfig.dynamic({
+    required Future<String?> Function() tokenProvider,
+    Future<String?> Function()? onTokenRefresh,
+    void Function()? onTokenExpired,
+  }) {
+    return AuthConfig(
+      tokenProvider: tokenProvider,
+      onTokenRefresh: onTokenRefresh,
+      onTokenExpired: onTokenExpired,
+    );
+  }
+
+  /// Creates a copy with updated token.
+  AuthConfig copyWithToken(String? newToken) {
+    final newHeaders = Map<String, String>.from(headers);
+    if (newToken != null) {
+      newHeaders['Authorization'] = 'Bearer $newToken';
+    } else {
+      newHeaders.remove('Authorization');
+    }
+    return AuthConfig(
+      token: newToken,
+      headers: newHeaders,
+      apiKey: apiKey,
+      apiKeyHeader: apiKeyHeader,
+      onTokenRefresh: onTokenRefresh,
+      tokenProvider: tokenProvider,
+      onTokenExpired: onTokenExpired,
     );
   }
 }

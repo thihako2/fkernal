@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2025-12-24
+
+### 🎉 Highlights
+
+This release introduces major improvements to authentication, networking performance, and testing infrastructure, while making the core package lighter by decoupling Firebase.
+
+### Added
+
+- **Token Refresh & Dynamic Auth**:
+  - `AuthConfig.dynamic()` for retrieving tokens from secure storage before each request.
+  - `onTokenRefresh` callback for automatic 401 handling and request retry.
+  - `onTokenExpired` callback for handling session expiration (e.g., logout).
+  - `FKernal.instance.updateAuthToken()` and `clearAuthToken()` for runtime control.
+- **Pagination Support**:
+  - New `FKernalPaginatedBuilder` widget for infinite scroll lists.
+  - Automatic load-more logic and state management (loading more, has more data).
+- **Advanced Caching**:
+  - Wildcard pattern invalidation: `storageManager.invalidateCachePattern('/users*')`.
+  - Endpoint-specific cache clearing: `storageManager.clearEndpointCache('/users')`.
+- **Testing Utilities**:
+  - Comprehensive mocks in `package:fkernal/testing.dart`.
+  - `MockNetworkClient` with request recording and response/error mocking.
+  - `MockStorageProvider` and `MockSecureStorageProvider` for in-memory testing.
+- **Performance Optimizations**:
+  - **Request Deduplication**: Concurrent identical GET requests are now automatically merged into a single network call.
+  - **Per-Widget Cancellation**: Requests are now cancellable at the endpoint level via `FKernal.instance.cancelEndpoint()`.
+
+### Changed
+
+- **Firebase Decoupling**: Moved `cloud_firestore`, `firebase_auth`, and `firebase_storage` to a separate optional module.
+  - Import `package:fkernal/fkernal_firebase.dart` if you need Firebase integration.
+- **Improved Error Mapping**: Detailed mapping of `DioException` types to granular `FKernalErrorType` (timeout, rateLimited, cancelled, etc.).
+
+### Fixed
+
+- Request deduplication now correctly handles cache hits and misses.
+- Improved path parameter substitution logic to prevent accidental overlaps.
+
+---
+
 ## [1.1.0] - 2025-12-24
 
 ### 🎉 Highlights

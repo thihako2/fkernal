@@ -40,7 +40,7 @@ export 'src/networking/endpoint.dart';
 export 'src/networking/http_method.dart';
 export 'src/networking/api_client.dart';
 export 'src/networking/endpoint_registry.dart';
-export 'src/networking/firebase_network_client.dart';
+// Firebase is optional - import 'package:fkernal/fkernal_firebase.dart' if needed
 
 // State
 export 'src/state/resource_state.dart';
@@ -68,6 +68,7 @@ export 'src/widgets/fkernal_action_builder.dart';
 export 'src/widgets/fkernal_local_builder.dart';
 export 'src/widgets/auto_error_widget.dart';
 export 'src/widgets/auto_loading_widget.dart';
+export 'src/widgets/fkernal_paginated_builder.dart';
 
 // Extensions
 export 'src/extensions/context_extensions.dart';
