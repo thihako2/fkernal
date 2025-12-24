@@ -3,10 +3,36 @@
 [![Pub Version](https://img.shields.io/pub/v/fkernal)](https://pub.dev/packages/fkernal)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-3.10+-blue.svg)](https://flutter.dev)
+[![Dart](https://img.shields.io/badge/Dart-3.0+-blue.svg)](https://dart.dev)
+[![Style: Very Good Analysis](https://img.shields.io/badge/style-very_good_analysis-B22C89.svg)](https://pub.dev/packages/very_good_analysis)
 
 **The Configuration-Driven Flutter Kernel** — Build production-grade Flutter apps in a fraction of the time.
 
 FKernal eliminates boilerplate by providing a centralized orchestration layer for **Networking, State Management, Persistence, Error Recovery, and Design Systems**. Define your endpoints and theme tokens once — FKernal handles everything else automatically.
+
+> 💡 **Philosophy**: Configuration over Implementation. If something can be declared in a config object, it should be.
+
+---
+
+## 📑 Table of Contents
+
+- [Features](#-features)
+- [Installation](#-installation)
+- [Quick Start](#-quick-start)
+- [Core Concepts](#-core-concepts)
+- [Widgets Reference](#-widgets-reference)
+- [Context Extensions](#-context-extensions)
+- [Theming](#-theming)
+- [Error Handling](#️-error-handling)
+- [Models](#-models)
+- [Caching Strategy](#-caching-strategy)
+- [Extensibility](#-extensibility)
+- [Advanced Patterns](#-advanced-patterns)
+- [Best Practices](#-best-practices)
+- [FAQ](#-faq)
+- [Migration Guide](#-migration-guide)
+- [License](#-license)
+- [Contributing](#-contributing)
 
 ---
 
@@ -14,26 +40,54 @@ FKernal eliminates boilerplate by providing a centralized orchestration layer fo
 
 | Feature | Description |
 |---------|-------------|
-| 🌐 **Declarative Networking** | Define endpoints as constants. No more repositories, clients, or interceptors. |
-| 🔄 **Automatic State Management** | Every endpoint gets a reactive state slice with Loading, Data, and Error states. |
-| 💾 **Smart Caching** | TTL-based caching with automatic invalidation on mutations. |
-| 🎨 **Theming System** | Define theme tokens once, apply everywhere with dynamic light/dark switching. |
-| ⚠️ **Unified Error Handling** | All errors normalized into typed `FKernalError` objects. |
-| 📦 **Local State Slices** | Manage UI state with Value, Toggle, Counter, List, and Map slices. |
-| 🔌 **Extensible Architecture** | Override network client, storage providers, and add observers. |
+| 🌐 **Declarative Networking** | Define endpoints as constants. No more repositories, clients, or interceptors. Supports REST out of the box with extension points for GraphQL/gRPC. |
+| 🔄 **Automatic State Management** | Every endpoint gets a reactive state slice with Loading, Data, and Error states. Built on `ValueNotifier` for fine-grained, efficient updates. |
+| 💾 **Smart Caching** | TTL-based caching with automatic invalidation on mutations. Supports Stale-While-Revalidate pattern. Backed by Hive for binary storage. |
+| 🎨 **Theming System** | Define theme tokens once, apply everywhere with dynamic light/dark switching. Full Material 3 support with automatic persistence. |
+| ⚠️ **Unified Error Handling** | All errors normalized into typed `FKernalError` objects with automatic retry logic, exponential backoff, and environment-aware logging. |
+| 📦 **Local State Slices** | Manage UI state with Value, Toggle, Counter, List, and Map slices. Includes undo/redo support with history tracking. |
+| 🔌 **Extensible Architecture** | Override network client, storage providers, and add observers. Implement `INetworkClient`, `IStorageProvider`, or `ISecureStorageProvider` for full customization. |
+| 🔍 **Observability** | Built-in `KernelObserver` and `KernelEvent` systems for structured runtime monitoring, debugging, and analytics integration. |
+| 🔥 **Firebase Ready** | Built-in `FirebaseNetworkClient` for seamless Firebase/Firestore integration. |
+| 🔐 **Type-Safe Resources** | Use `ResourceKey<T>` for compile-time type safety when accessing state. Catch typos at build time. |
 
 ---
 
 ## 📦 Installation
 
+Add FKernal to your `pubspec.yaml`:
+
 ```yaml
 dependencies:
-  fkernal: ^1.0.0
+  fkernal: ^1.1.0
 ```
 
 Then run:
 ```bash
 flutter pub get
+```
+
+### Requirements
+
+| Requirement | Minimum Version |
+|-------------|-----------------|
+| **Flutter** | 3.10.0+ |
+| **Dart** | 3.0.0+ |
+| **Platforms** | iOS, Android, Web, macOS, Windows, Linux |
+
+### Optional Dependencies
+
+For secure storage on mobile platforms (recommended for auth tokens):
+```yaml
+dependencies:
+  flutter_secure_storage: ^9.0.0
+```
+
+For Firebase/Firestore integration:
+```yaml
+dependencies:
+  cloud_firestore: ^4.0.0
+  firebase_core: ^2.0.0
 ```
 
 ---
@@ -491,17 +545,95 @@ await FKernal.init(
 
 ## 📋 Best Practices
 
-1. **Centralize Endpoints**: Keep all endpoints in a single `lib/config/endpoints.dart` file.
+### 1. Centralize Endpoints
+Keep all endpoints in a single configuration file for maintainability:
+```dart
+// lib/config/endpoints.dart
+final appEndpoints = <Endpoint>[
+  // Auth
+  Endpoint(id: 'login', path: '/auth/login', method: HttpMethod.post),
+  // Users
+  Endpoint(id: 'getUsers', path: '/users', ...),
+];
+```
 
-2. **Use Parsers**: Always provide a `parser` for type-safe data handling.
+### 2. Use Parsers for Type Safety
+Always provide a `parser` function to ensure type-safe data handling:
+```dart
+parser: (json) => (json as List)
+    .map((u) => User.fromJson(Map<String, dynamic>.from(u)))
+    .toList(),
+```
 
-3. **Leverage Invalidation**: Use `invalidates` to keep UI consistent without manual refreshes.
+### 3. Leverage Cache Invalidation
+Use `invalidates` to keep UI consistent without manual refreshes:
+```dart
+Endpoint(
+  id: 'createPost',
+  invalidates: ['getPosts', 'getUserPosts', 'getPostStats'],
+),
+```
 
-4. **Use Appropriate Cache TTLs**: Match cache duration to data volatility.
+### 4. Use Appropriate Cache TTLs
+Match cache duration to data volatility:
+| Data Type | Recommended TTL |
+|-----------|-----------------|
+| User session/auth | No cache |
+| Notifications | 1 minute |
+| Feed/Timeline | 2-5 minutes |
+| User profile | 5-15 minutes |
+| Static content | 24 hours |
 
-5. **Handle Empty States**: Always provide `emptyWidget` or check for empty data.
+### 5. Handle Empty States
+Always provide feedback for empty data:
+```dart
+emptyWidget: const AutoEmptyWidget(
+  title: 'No Users',
+  subtitle: 'Invite team members to get started',
+  icon: Icons.group_add,
+),
+```
 
-6. **Validate Models**: Implement `validate()` for input validation before API calls.
+### 6. Validate Models Before Mutations
+Always validate data before sending to the API to provide immediate feedback.
+
+---
+
+## ❓ FAQ
+
+### How does FKernal compare to BLoC/Riverpod/Provider?
+FKernal is **not a replacement** for state management libraries — it's a **higher-level abstraction** that handles the common patterns (API calls, caching, loading states) that these libraries require you to implement manually. Typical code reduction is 80-90%.
+
+### Can I use FKernal with an existing app?
+Yes! FKernal can be adopted incrementally. Initialize alongside your existing setup and migrate one screen at a time.
+
+### Does FKernal work with GraphQL?
+Yes, by implementing `INetworkClient` to translate endpoints to GraphQL queries.
+
+### How do I handle authentication?
+```dart
+// Update token after login
+FKernal.instance.updateAuthToken(newToken);
+// Clear token on logout
+FKernal.instance.updateAuthToken(null);
+```
+
+### Is FKernal production-ready?
+Yes! FKernal includes comprehensive error handling, automatic retry with exponential backoff, memory-efficient state management, and built-in observability for monitoring.
+
+---
+
+## 🔄 Migration Guide
+
+### From BLoC Pattern
+**Before**: 80+ lines (Bloc class + Repository + Screen)
+**After**: 10-15 lines (Endpoint config + FKernalBuilder)
+
+### From Riverpod
+**Before**: FutureProvider + Consumer with `.when()` handling
+**After**: Endpoint config + FKernalBuilder with automatic state handling
+
+See the [full migration guide](https://github.com/thihako2/fkernal/blob/main/docs/migration.md) for detailed examples.
 
 ---
 
@@ -513,7 +645,20 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details.
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details on:
+- Code of conduct
+- Development setup
+- Pull request process
+- Design principles
+
+---
+
+## 🔗 Resources
+
+- [API Documentation](https://pub.dev/documentation/fkernal/latest/)
+- [Example App](https://github.com/thihako2/fkernal/tree/main/example)
+- [GitHub Issues](https://github.com/thihako2/fkernal/issues)
+- [Changelog](CHANGELOG.md)
 
 ---
 
